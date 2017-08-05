@@ -22,7 +22,7 @@ fun main(args: Array<String>) {
     }
 
     val latch = CountDownLatch(numRunners)
-    val script = "invoke('myscript', payload) { println it }"
+    val script = "invoke('myscript', payload).thenApply { result(it) }"
     for (i in 1..numRunners) {
         vertx.deployVerticle(GroovyScriptRunner()) { event ->
             if (event.succeeded()) {

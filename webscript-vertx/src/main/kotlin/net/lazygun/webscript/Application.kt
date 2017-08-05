@@ -22,14 +22,17 @@ fun main(args: Array<String>) {
     }
 
     val latch = CountDownLatch(numRunners)
-    val script = "invoke('myscript', payload).get()"
+    val script = "invoke('myscript', payload) { println it }"
     for (i in 1..numRunners) {
         vertx.deployVerticle(GroovyScriptRunner()) { event ->
             if (event.succeeded()) {
                 val message = GroovyScriptAndPayload(script, listOf(i)).toJsonObject()
-                vertx.eventBus().send(GroovyScriptRunner.address, message) {
-                    result: AsyncResult<Message<Any>> ->
-                    log.info("Runner $i replied with: ${result.result().body()}")
+                vertx.eventBus().send(GroovyScriptRunner.address, message) { result: AsyncResult<Message<Any?>> ->
+                    if (result.succeeded()) {
+                        log.info("Success: runner $i replied with: ${result.result()?.body()}")
+                    } else {
+                        log.error("Failure sending message to runner $i: ${result.cause()}")
+                    }
                     latch.countDown()
                 }
             } else {

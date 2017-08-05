@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module version="2.0">
+    <meta>
+        <identity>
+            <uri>urn:net:lazygun:webscript</uri>
+            <version>1.0.0</version>
+        </identity>
+        <info>
+            <name>WebScript</name>
+            <description>WebScript main module</description>
+            <icon>res:/WebScript/pub/icon.png</icon>
+        </info>
+    </meta>
+
+    <system>
+        <dynamic/>
+    </system>
+
+    <rootspace name="WebScript - Development Space" uri="urn:net:lazygun:webscript">
+        <fileset>
+            <regex>res:/etc/system/SimpleDynamicImportHook.xml</regex>
+        </fileset>
+        <mapper>
+            <config>
+                <import>res:/net/lazygun/webscript/function/functionMapperConfig.xml</import>
+                <import>res:/net/lazygun/webscript/gist/gistMapperConfig.xml</import>
+            </config>
+            <space>
+                <literal uri="res:/dummy" type="string">Replace Me!</literal>
+                <fileset>
+                    <regex>res:/net/lazygun/webscript/.*</regex>
+                </fileset>
+                <import>
+                    <uri>urn:org:netkernel:mod:pds</uri>
+                </import>
+                <import>
+                    <uri>urn:org:netkernel:mod:pds:memory</uri>
+                </import>
+                <literal type="xml" uri="res:/etc/pdsConfig.xml">
+                    <config>
+                        <zone>global:webscript</zone>
+                    </config>
+                </literal>
+                <fileset>
+                    <regex>res:/resources/endpoints/.*</regex>
+                </fileset>
+                <import>
+                    <uri>urn:org:netkernel:lang:groovy</uri>
+                </import>
+                <import><!-- import Freemarker module (used by example) -->
+                    <uri>urn:org:netkernel:lang:freemarker</uri>
+                </import>
+            </space>
+        </mapper>
+        <fileset><!--Icon-->
+            <regex>res:/WebScript/pub/(.*)</regex>
+            <rewrite>res:/resources/pub/$1</rewrite>
+        </fileset>
+        <import>
+            <uri>urn:org:netkernel:mod:hds</uri>
+        </import>
+        <import>
+            <uri>urn:org:netkernel:xml:core</uri>
+        </import>
+    </rootspace>
+
+    <rootspace name="WebScript - Documentation Space" public="true" uri="urn:net:lazygun:webscript:doc">
+        <fileset>
+            <regex>res:/etc/system/(Books|Docs).xml</regex>
+        </fileset>
+        <fileset>
+            <regex>res:/resources/doc/.*</regex>
+        </fileset>
+    </rootspace>
+
+    <rootspace name="WebScript - Unit Test Space" public="true" uri="urn:net:lazygun:webscript:test">
+        <fileset>
+            <regex>res:/etc/system/Tests.xml</regex>
+        </fileset>
+        <fileset>
+            <regex>res:/resources/test/.*</regex>
+        </fileset>
+        <endpoint><!-- stop any configuration from module under test from polluting address space -->
+            <prototype>Limiter</prototype>
+            <grammar>res:/etc/
+                <regex type="anything"/>
+            </grammar>
+        </endpoint>
+        <import><!-- import the main space which we are testing -->
+            <uri>urn:net:lazygun:webscript</uri>
+        </import>
+        <import>
+            <uri>urn:org:netkernel:ext:layer1</uri>
+            <!--<private/>--> <!-- Needs to be public to be visible to custom assert definition in testlist -->
+        </import>
+        <import>
+            <uri>urn:org:netkernel:lang:groovy</uri>
+        </import>
+        <import>
+            <uri>urn:org:netkernel:mod:hds</uri>
+        </import>
+    </rootspace>
+</module>

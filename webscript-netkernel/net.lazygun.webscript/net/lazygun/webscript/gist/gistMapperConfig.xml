@@ -1,0 +1,25 @@
+<config>
+    <endpoint>
+        <grammar>
+            <active>
+                <identifier>active:gist</identifier>
+                <argument name="username"/>
+                <argument name="id"/>
+                <argument name="file"/>
+            </active>
+        </grammar>
+        <request>res:/dummy</request>
+    </endpoint>
+    
+    <endpoint>
+        <grammar>
+            <simple>gist:{username}:{id}:{file}</simple>
+        </grammar>
+        <request>
+            <identifier>active:gist</identifier>
+            <argument name="username">arg:username</argument>
+            <argument name="id">arg:id</argument>
+            <argument name="file">arg:file</argument>
+        </request>
+    </endpoint>
+</config>

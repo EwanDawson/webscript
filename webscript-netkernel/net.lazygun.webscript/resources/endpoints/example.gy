@@ -1,0 +1,14 @@
+import org.netkernel.layer0.nkf.INKFLocale
+
+value = context.source("arg:value");
+
+req = context.createRequest("active:freemarker");
+req.addArgumentByValue("operator", 'Input value: ${value}');
+req.addArgumentByValue("value", value.toString());
+req.setRepresentationClass(String.class);
+result = context.issueRequest(req);
+
+context.createResponseFrom(result);
+
+msg = context.formatRaw("Groovy example running with input %1",value);
+context.logRaw(INKFLocale.LEVEL_INFO,msg);

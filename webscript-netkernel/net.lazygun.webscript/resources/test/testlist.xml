@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testlist>
+
+    <assertDefinition name="functionBodyEquals">
+        <identifier>active:groovy</identifier>
+        <argument name="operator">
+            <literal type="string">
+                <![CDATA[
+                received = context.source('arg:received', String.class)
+                expected = context.source('arg:expected', String.class)
+                if (expected == received) {
+                  context.createResponseFrom(true)
+                } else {
+                  context.sink('active:assert/Expected', expected)
+                  context.sink('active:assert/Received', received)
+                  context.createResponseFrom(false)
+                }
+                ]]>
+            </literal>
+        </argument>
+        <argument name="received">
+            <request>
+                <identifier>active:xpath</identifier>
+                <argument name="operand">arg:test:result</argument>
+                <argument name="operator">
+                    <literal type="string">string(//function/body/text())</literal>
+                </argument>
+            </request>
+        </argument>
+        <argument name="expected">arg:test:tagValue</argument>
+    </assertDefinition>
+
+    <test name="f:echo">
+        <setup>
+            <verb>SINK</verb>
+            <identifier>f:echo</identifier>
+            <argument name="primary">
+                <literal type="hds">
+                    <function>
+                        <id>echo</id>
+                        <type>local</type>
+                        <language>groovy</language>
+                        <body>args.join(',')</body>
+                    </function>
+                </literal>
+            </argument>
+        </setup>
+        <request>
+            <identifier>f:echo</identifier>
+        </request>
+        <teardown>
+            <verb>DELETE</verb>
+            <identifier>f:echo</identifier>
+        </teardown>
+        <assert>
+            <functionBodyEquals>args.join(',')</functionBodyEquals>
+        </assert>
+    </test>
+
+    <test name="active:f+name@repeat">
+        <setup>
+            <verb>SINK</verb>
+            <identifier>active:f</identifier>
+            <argument name="name">repeat</argument>
+            <argument name="primary">
+                <literal type="hds">
+                    <function>
+                        <id>repeat</id>
+                        <type>local</type>
+                        <language>groovy</language>
+                        <body>args[0] * (args[1] as Integer)</body>
+                    </function>
+                </literal>
+            </argument>
+        </setup>
+        <request>
+            <identifier>active:f</identifier>
+            <argument name="name">repeat</argument>
+        </request>
+        <teardown>
+            <verb>DELETE</verb>
+            <identifier>active:f</identifier>
+            <argument name="name">repeat</argument>
+        </teardown>
+        <assert>
+            <functionBodyEquals>args[0] * (args[1] as Integer)</functionBodyEquals>
+        </assert>
+    </test>
+
+    <test name="sum(3,2)">
+        <request>
+            <identifier>sum(3,2)</identifier>
+        </request>
+        <assert>
+            <stringEquals>5</stringEquals>
+        </assert>
+    </test>
+
+    <test name="active:apply+function@f:sum+args@3,2">
+        <request>
+            <identifier>active:apply</identifier>
+            <argument name="function">f:sum</argument>
+            <argument name="args">3,2</argument>
+        </request>
+        <assert>
+            <stringEquals>5</stringEquals>
+        </assert>
+    </test>
+
+    <test name="sum(A,B,base=16)">
+        <request>
+            <identifier>sum(A,B,base=16)</identifier>
+        </request>
+        <assert>
+            <stringEquals>15</stringEquals>
+        </assert>
+    </test>
+
+    <test name="active:apply+function@f:sum+args@A,B,base=16">
+        <request>
+            <identifier>active:apply</identifier>
+            <argument name="function">f:sum</argument>
+            <argument name="args">A,B,base=16</argument>
+        </request>
+        <assert>
+            <stringEquals>15</stringEquals>
+        </assert>
+    </test>
+
+    <test name="gist:BungleFeet:319901f71d9e7ec1ff6a:time">
+        <request>
+            <identifier>gist:BungleFeet:319901f71d9e7ec1ff6a:time</identifier>
+        </request>
+        <assert>
+            <stringEquals>context.createResponseFrom(new Date().toString())</stringEquals>
+        </assert>
+    </test>
+
+    <test name="active:gist+username@BungleFeet+id@319901f71d9e7ec1ff6a+file@time">
+        <request>
+            <identifier>active:gist</identifier>
+            <argument name="username">BungleFeet</argument>
+            <argument name="id">319901f71d9e7ec1ff6a</argument>
+            <argument name="file">time</argument>
+        </request>
+        <assert>
+            <stringEquals>context.createResponseFrom(new Date().toString())</stringEquals>
+        </assert>
+    </test>
+
+</testlist>

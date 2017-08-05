@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<docs>
+	<doc>
+		<id>urn:net:lazygun:webscript:guide</id>
+		<title>Guide to WebScript</title>
+		<desc/>
+		<uri>res:/resources/doc/doc_guide.txt</uri>
+	</doc>
+	<doc>
+		<id>urn:net:lazygun:webscript:example</id>
+		<title>Reference for example endpoint</title>
+		<desc/>
+		<uri>res:/resources/doc/doc_example.txt</uri>
+	</doc>
+</docs>

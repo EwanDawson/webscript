@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tests>
+	<test>
+		<id>test:urn:net:lazygun:webscript</id>
+		<name>WebScript Tests</name>
+		<desc>Tests for WebScript main module</desc>
+		<uri>res:/resources/test/testlist.xml</uri>
+	</test>
+</tests>

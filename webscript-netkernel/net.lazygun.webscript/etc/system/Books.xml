@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<books>
+	<book>
+		<id>book:urn:net:lazygun:webscript</id>
+		<title>WebScript</title>
+		<desc>WebScript main module</desc>
+		<toc>
+			<item id="urn:net:lazygun:webscript:guide"/>
+			<item id="urn:net:lazygun:webscript:example"/>
+		</toc>
+	</book>
+</books>

@@ -1,0 +1,7 @@
+include (
+    'webscript-camel',
+    'webscript-java',
+    'webscript-netkernel',
+    'webscript-vertx'
+)
+

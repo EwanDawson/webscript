@@ -12,13 +12,21 @@ buildscript {
 }
 
 apply plugin: 'kotlin'
+apply plugin: 'application'
 
 repositories {
     mavenCentral()
 }
 
+configurations {
+    quasar
+}
+
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    compile 'co.paralleluniverse:quasar-core:0.7.7:jdk8'
+    compile 'co.paralleluniverse:quasar-kotlin:0.7.7'
+    quasar 'co.paralleluniverse:quasar-core:0.7.7:jdk8'
 }
 
 compileKotlin {
@@ -27,3 +35,7 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+mainClassName = 'net.lazygun.webscript.ApplicationKt'
+
+run.jvmArgs("-javaagent:${(++configurations.quasar.iterator())}")

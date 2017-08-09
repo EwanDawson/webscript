@@ -24,6 +24,7 @@ configurations {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     compile 'co.paralleluniverse:quasar-core:0.7.7:jdk8'
     compile 'co.paralleluniverse:quasar-kotlin:0.7.7'
     quasar 'co.paralleluniverse:quasar-core:0.7.7:jdk8'

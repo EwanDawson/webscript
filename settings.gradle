@@ -5,4 +5,5 @@ include (
     'webscript-vertx'
 )
 include 'webscript-quasar'
+include 'camel'
 

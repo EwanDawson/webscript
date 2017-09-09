@@ -37,9 +37,5 @@ object URISpec: Spek({
                 assertEquals("queryParam1=myParam1&queryParam2=myParam2", uri.query)
             }
         }
-
-        on("parsing a custom URI identifying a Groovy script evaluation") {
-            val uri = URI("groovy://")
-        }
     }
 })

@@ -1,3 +1,4 @@
+import us.bpsm.edn.Symbol
 import java.net.URI
 
 /**
@@ -19,24 +20,34 @@ class SubstitutingResolver(val identifier: Fn, val replacement: Fn) : TermResolv
 }
 
 class HttpResolver : TermResolver {
-    override fun canResolve(term: Any?) = term is URI && (term.scheme == "http" || term.scheme == "https")
+    override fun canResolve(term: Any?) =
+        term is FnApplicationPositionalArgs &&
+            term.fn == httpFn &&
+            term.args.size == 1
 
     override fun resolve(term: Any?, context: Context): String {
-        if (term !is URI) throw IllegalArgumentException()
-        val url = term.toURL().toString().replaceFirst("://", "4://")
+        val urlTerm = (term as FnApplicationPositionalArgs).args.first()
+        val url = context.resolve(urlTerm).toString().replaceFirst("://", "4://")
         return (Camel.producer.requestBody(url, null, String::class.java))
     }
 }
 
 class GroovyScriptResolver : TermResolver {
-    override fun canResolve(term: Any?) = term is FnScript && term.lang == "groovy"
+    override fun canResolve(term: Any?) =
+        term is FnApplicationPositionalArgs &&
+            term.fn == groovyFn &&
+            term.args.size == 1
 
     override fun resolve(term: Any?, context: Context): Any? {
-        val source = when (term) {
-            is FnInlineScript -> term.source.toString()
-            is FnURIScript -> context.resolve(term.sourceUri) as? String ?: throw IllegalArgumentException()
+        val sourceArg = (term as FnApplicationPositionalArgs).args.first()
+        val source = when (sourceArg) {
+            is URI -> context.resolve(FnApplicationPositionalArgs(httpFn, listOf(sourceArg.toURL()))).toString()
+            is String -> sourceArg
             else -> throw IllegalArgumentException()
         }
         return Groovy.evaluate(source, context)
     }
 }
+
+val groovyFn = FnIdentifier(Symbol.newSymbol("sys.scripting.groovy", "eval")!!)
+val httpFn = FnIdentifier(Symbol.newSymbol("sys.net.http", "get")!!)

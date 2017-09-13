@@ -12,54 +12,66 @@ import java.time.Instant
  */
 
 object Term {
+    @Suppress("UNCHECKED_CAST")
     private val functionApplicationBuilder: CollectionBuilder = object : CollectionBuilder {
         var index = 0
         var function: Fn? = null
-        val argNames = mutableListOf<Keyword>()
-        val argValues = mutableListOf<Any?>()
+        var args: Any? = null
         override fun add(o: Any?) {
-            when {
-                index == 0 -> function = o as? Fn ?: throw SyntaxError("The first element in a function application list must be a Fn")
-                isOdd(index) -> argNames.add(o as? Keyword ?: throw SyntaxError("Arguments must come in keyword-term pairs"))
-                isEven(index) -> argValues.add(o)
+            when (index) {
+                0 -> function = FnIdentifier(o as? Symbol ?: throw SyntaxError("The first element in a function application list must be a symbol"))
+                1 -> {
+                    args = when (o) {
+                        is Map<*,*> -> {
+                            if (o.keys.all { it is Keyword }) o
+                            else throw SyntaxError("Named argument map keys must be keywords")
+                        }
+                        is RandomAccess -> o
+                        else -> throw SyntaxError("The function application argument term must be either a map or vector, but got '$o'")
+                    }
+                }
+                else -> throw SyntaxError("Function application term may contain only two sub-terms - a function identifier (symbol) term and an (optional) argument (map or vector) term")
             }
             index++
         }
-        override fun build(): FnApplication {
-            val fn = function ?: throw AssertionError()
-            return FnApplication(fn, argNames.zip(argValues).toMap())
+        override fun build(): FnApplication<*> {
+            try {
+                val fn = function ?: throw AssertionError()
+                return when (args) {
+                    null -> FnApplicationPositionalArgs(fn)
+                    is RandomAccess -> FnApplicationPositionalArgs(fn, args as List<Any?>)
+                    is Map<*, *> -> FnApplicationNamedArgs(fn, args as Map<Keyword, Any?>)
+                    else -> throw AssertionError()
+                }
+            } finally {
+                reset()
+            }
         }
-        private fun isOdd(x: Int) = x % 2 == 1
-        private fun isEven(x: Int) = !isOdd(x)
+        private fun reset() {
+            index = 0
+            function = null
+            args = null
+        }
     }
 
     private val fnIdentifierTagHandler = TagHandler { tag, value ->
         FnIdentifier(value as? Symbol ?: throw SyntaxError("The value following a function identifier tag ('$tag') must be a symbol"))
     }
 
-    private val fnScriptTagHandler = TagHandler { tag, value ->
-        when (value) {
-            is String -> FnInlineScript(tag.name, value)
-            is URI -> FnURIScript(tag.name, value)
-            else -> throw SyntaxError("The value following a function script tag ('$tag') must be a script literal or URI")
-        }
-    }
-
     private val instHandler = TagHandler { tag, value ->
         Instant.parse(value as? String ?: throw SyntaxError("The value following an instant tag ('$tag') must be a string literal"))
     }
 
-    private val config = Parsers.newParserConfigBuilder()
-        .setListFactory { functionApplicationBuilder }
-        .putTagHandler(Tag.newTag("fn"), fnIdentifierTagHandler)
-        .putTagHandler(Tag.newTag("lang", "groovy"), fnScriptTagHandler)
-        .putTagHandler(Tag.newTag("inst"), instHandler)
-        .putTagHandler(Tag.newTag("uri"), { _, value -> URI(value as String) })
-        .build()
+    private val config = {
+        Parsers.newParserConfigBuilder()
+            .setListFactory { functionApplicationBuilder }
+            .putTagHandler(Tag.newTag("fn"), fnIdentifierTagHandler)
+            .putTagHandler(Tag.newTag("inst"), instHandler)
+            .putTagHandler(Tag.newTag("uri"), { _, value -> URI(value as String) })
+            .build()
+    }
 
-    private val parser = Parsers.newParser(config)
-
-    operator fun invoke(edn: String): Any? = parser.nextValue(Parsers.newParseable(edn))
+    operator fun invoke(edn: String): Any? = Parsers.newParser(config()).nextValue(Parsers.newParseable(edn))
 }
 
 class SyntaxError(message: String) : RuntimeException(message)
@@ -68,8 +80,8 @@ interface Fn
 
 data class FnIdentifier(val symbol: Symbol): Fn
 
-abstract class FnScript(open val lang: String): Fn
-data class FnInlineScript(override val lang: String, val source: CharSequence): FnScript(lang)
-data class FnURIScript(override val lang: String, val sourceUri: URI): FnScript(lang)
+abstract class FnApplication<out T>(open val fn: Fn, open val args: T)
 
-data class FnApplication(val fn: Fn, val args: Map<Keyword, Any?>)
+data class FnApplicationPositionalArgs(override val fn: Fn, override val args: List<Any?> = listOf()): FnApplication<List<Any?>>(fn, args)
+
+data class FnApplicationNamedArgs(override val fn: Fn, override val args: Map<Keyword, Any?>): FnApplication<Map<Keyword, Any?>>(fn, args)

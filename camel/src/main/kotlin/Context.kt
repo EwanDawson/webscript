@@ -27,16 +27,20 @@ class Context(val resolvers: List<TermResolver>, val args: Map<Keyword, Argument
     }
     fun withResolver(resolver: TermResolver) = Context(listOf(resolver) + resolvers, args)
     fun withSubstitution(from: Fn, to: Fn) = withResolver(SubstitutingResolver(from, to))
-    fun withArgs(newArgs: Map<Keyword, Any?>) = Context(resolvers, newArgs.mapValues { Argument(it.key, it.value, this) })
+    fun withArgs(newArgs: Map<Keyword, Any?>) = Context(resolvers, newArgs.mapValues { NamedArgument(it.key, it.value, this) })
     companion object {
         val default = Context(listOf(HttpResolver(), GroovyScriptResolver()))
     }
 }
 
-data class Argument internal constructor(val name: Keyword, val term: Any?, private val context: Context) {
+abstract class Argument (open val term: Any?, open val context: Context) {
     val value: Any? by lazy {
         context.resolve(term)
     }
 }
+
+data class NamedArgument internal constructor(val name: Keyword, override val term: Any?, override val context: Context): Argument(term, context)
+
+data class PositionalArgument internal constructor(val index: Int, override val term: Any?, override val context: Context): Argument(term, context)
 
 class UnresolvableTermException(term: Any?) : Throwable("No resolver found for term '$term'")

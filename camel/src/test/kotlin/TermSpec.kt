@@ -3,8 +3,6 @@ import org.jetbrains.spek.api.dsl.describe
 import org.jetbrains.spek.api.dsl.on
 import us.bpsm.edn.Keyword
 import us.bpsm.edn.Symbol
-import java.net.URI
-import java.time.Instant
 import kotlin.test.assertEquals
 
 /**
@@ -14,7 +12,7 @@ import kotlin.test.assertEquals
 object TermSpec: Spek({
     fun test(edn: String, expected: Any?) {
         on(edn) {
-            assertEquals(expected, Term(edn))
+            assertEquals(Term.of(expected), Term.parse(edn))
         }
     }
     describe("parsing of EDN to terms") {
@@ -28,11 +26,8 @@ object TermSpec: Spek({
         test("[1,4,2,3]",listOf(1L, 4L, 2L, 3L))
         test("{\"a\"1\"b\"2}",mapOf("a" to 1L, "b" to 2L))
         test("#{true false}",setOf(true, false))
-        test("#uri \"http://www.example.com\"",URI("http://www.example.com"))
-        test("#inst \"2017-09-09T23:25:00.000Z\"",Instant.parse("2017-09-09T23:25:00.000Z"))
         test("net.lazygun/math.double",Symbol.newSymbol("net.lazygun", "math.double"))
-        test("(net.lazygun/math.double)",FnApplicationPositionalArgs(FnIdentifier(Symbol.newSymbol("net.lazygun", "math.double"))))
-        test("(net.lazygun/math.double [123])",FnApplicationPositionalArgs(FnIdentifier(Symbol.newSymbol("net.lazygun", "math.double")), listOf(123L)))
-        test("(net.lazygun/math.double {:x \"abc\" :y 123})",FnApplicationNamedArgs(FnIdentifier(Symbol.newSymbol("net.lazygun", "math.double")), mapOf(Keyword.newKeyword("x") to "abc", Keyword.newKeyword("y") to 123L)))
+        test("(net.lazygun/math.double)",Term.FunctionApplication(Term.Atom.Function(Symbol.newSymbol("net.lazygun", "math.double"))))
+        test("(net.lazygun/math.double {:x \"abc\" :y 123})",Term.FunctionApplication(Term.Atom.Function(Symbol.newSymbol("net.lazygun", "math.double")), Term.Container.Map(mapOf(Term.of(Keyword.newKeyword("x")) to Term.of("abc"), Term.of(Keyword.newKeyword("y")) to Term.of(123L)))))
     }
 })

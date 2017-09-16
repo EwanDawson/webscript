@@ -10,7 +10,7 @@ interface TermResolver<out To:Term> {
     fun resolve(term: Term, context: Context): To
 }
 
-open class SubstitutingResolver(val matcher: (Term.FunctionApplication) -> Boolean, val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : TermResolver<Term.FunctionApplication> {
+open class SubstitutingResolver(private val matcher: (Term.FunctionApplication) -> Boolean, private val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : TermResolver<Term.FunctionApplication> {
 
     override fun canResolve(term: Term) = term is Term.FunctionApplication && matcher(term)
 
@@ -22,8 +22,8 @@ class HttpResolver(private val client: Client) : TermResolver<Term.Atom.String> 
         term.symbol == httpFn && urlTerm(term) != Term.Atom.Nil
 
     override fun resolve(term: Term, context: Context): Term.Atom.String {
-        val url = context.resolve(urlTerm(term as Term.FunctionApplication)) as Term.Atom.String
-        return client.get(url)
+        val url = context.resolve(urlTerm(term as Term.FunctionApplication))
+        return client.get(url.get() as Term.Atom.String)
     }
 
     private fun urlTerm(term: Term.FunctionApplication) = term.args.value[urlParameter]!!
@@ -45,10 +45,10 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : TermResolver<Term
         term.symbol == groovyFn && sourceTerm(term) != Term.Atom.Nil && argsTerm(term) != Term.Atom.Nil
 
     override fun resolve(term: Term, context: Context): Term {
-        val sourceArg = context.resolve(sourceTerm(term as Term.FunctionApplication)) as Term.Atom.String
-        val argsMap = context.resolve(argsTerm(term)) as Term.Container.KeywordMap
-        val scriptArgs = argsMap.value.mapKeys { it.key.value }
-        return evaluator.evaluate(term.symbol, sourceArg, scriptArgs, context)
+        val sourceArg = context.resolve(sourceTerm(term as Term.FunctionApplication))
+        val argsMap = context.resolve(argsTerm(term))
+        val scriptArgs = (argsMap.get() as Term.Container.KeywordMap).value.mapKeys { it.key.value }
+        return evaluator.evaluate(term.symbol, sourceArg.get() as Term.Atom.String, scriptArgs, context)
     }
 
     private fun sourceTerm(term: Term.FunctionApplication) = term.args.value[sourceParameter]!!
@@ -70,10 +70,11 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : TermResolver<Term
 
 class GroovyUriScriptResolver(symbol: Term.Atom.Symbol, url: Term): SubstitutingResolver(
     { (fn) -> fn == symbol },
-    { fnAppl -> GroovyScriptResolver.forSourceAndArgs(HttpResolver.forUrl(url), fnAppl.args) }
+    { fnApply -> GroovyScriptResolver.forSourceAndArgs(HttpResolver.forUrl(url), fnApply.args) }
 )
 
+@Suppress("unused")
 class FunctionRenameResolver(from: Term.Atom.Symbol, to: Term.Atom.Symbol): SubstitutingResolver(
     { (fn) -> fn == from },
-    { fnAppl -> Term.FunctionApplication(to, Term.Container.KeywordMap(fnAppl.args.value.mapKeys { Term.Atom.Keyword(Keyword.newKeyword(to.value.prefix, it.key.value.name))  })) }
+    { fnApply -> Term.FunctionApplication(to, Term.Container.KeywordMap(fnApply.args.value.mapKeys { Term.Atom.Keyword(Keyword.newKeyword(to.value.prefix, it.key.value.name))  })) }
 )

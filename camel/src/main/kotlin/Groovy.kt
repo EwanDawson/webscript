@@ -1,6 +1,8 @@
 import groovy.lang.Binding
 import groovy.lang.GroovyShell
 import us.bpsm.edn.Keyword
+import java.util.concurrent.CompletableFuture.completedFuture
+import java.util.concurrent.Future
 
 /**
  * @author Ewan
@@ -22,14 +24,14 @@ object GroovyEvaluator: GroovyScriptResolver.Evaluator {
 
 class Data(private val term: Term, private val context: Context) {
     @Suppress("unused")
-    val value: Any?
+    val value: Future<*>
         get() = when (term) {
-            is Term.Atom<*> -> if (term == Term.Atom.Nil) null else term.value
+            is Term.Atom<*> -> if (term == Term.Atom.Nil) completedFuture(null) else completedFuture(term.value)
             is Term.Container<*> -> when (term) {
-                is Term.Container.List -> term.value.map { Data(it, context) }
-                is Term.Container.Set -> term.value.map { Data(it, context) }.toSet()
-                is Term.Container.Map -> term.value.map { Pair(Data(it.key, context), Data(it.value, context)) }.toMap()
-                is Term.Container.KeywordMap -> term.value.map { Pair(Data(it.key, context), Data(it.value, context)) }.toMap()
+                is Term.Container.List -> completedFuture(term.value.map { Data(it, context) })
+                is Term.Container.Set -> completedFuture(term.value.map { Data(it, context) }.toSet())
+                is Term.Container.Map -> completedFuture(term.value.map { Pair(Data(it.key, context), Data(it.value, context)) }.toMap())
+                is Term.Container.KeywordMap -> completedFuture(term.value.map { Pair(Data(it.key, context), Data(it.value, context)) }.toMap())
             }
             is Term.FunctionApplication -> context.resolve(term)
         }

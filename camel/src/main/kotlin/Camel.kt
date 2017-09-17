@@ -9,8 +9,8 @@ object Camel {
 }
 
 object CamelHttpClient : HttpResolver.Client {
-    override fun get(url: Term.Atom.String): Term.Atom.String {
+    override fun get(url: Term.Value.Atom.String): Term.Value.Atom.String {
         val http4url = url.value.replaceFirst("://", "4://")
-        return Term.Atom.String(Camel.producer.requestBody(http4url, null, String::class.java))
+        return Term.Value.Atom.String(Camel.producer.requestBody(http4url, null, String::class.java))
     }
 }

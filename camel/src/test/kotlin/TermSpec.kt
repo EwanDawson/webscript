@@ -27,7 +27,7 @@ object TermSpec: Spek({
         test("{\"a\"1\"b\"2}",mapOf("a" to 1L, "b" to 2L))
         test("#{true false}",setOf(true, false))
         test("net.lazygun/math.double",Symbol.newSymbol("net.lazygun", "math.double"))
-        test("(net.lazygun/math.double)",Term.FunctionApplication(Term.Atom.Symbol(Symbol.newSymbol("net.lazygun", "math.double"))))
-        test("(net.lazygun/math.double {:x \"abc\" :y 123})",Term.FunctionApplication(Term.Atom.Symbol(Symbol.newSymbol("net.lazygun", "math.double")), Term.Container.KeywordMap(mapOf(Term.Atom.Keyword(Keyword.newKeyword("x")) to Term.of("abc"), Term.Atom.Keyword(Keyword.newKeyword("y")) to Term.of(123L)))))
+        test("(net.lazygun/math.double)",Term.FunctionApplication(Term.Value.Atom.Symbol(Symbol.newSymbol("net.lazygun", "math.double"))))
+        test("(net.lazygun/math.double {:x \"abc\" :y 123})",Term.FunctionApplication(Term.Value.Atom.Symbol(Symbol.newSymbol("net.lazygun", "math.double")), Term.Value.Container.KeywordMap(mapOf(Term.Value.Atom.Keyword(Keyword.newKeyword("x")) to Term.of("abc"), Term.Value.Atom.Keyword(Keyword.newKeyword("y")) to Term.of(123L)))))
     }
 })

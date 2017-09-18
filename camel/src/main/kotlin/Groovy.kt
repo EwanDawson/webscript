@@ -1,4 +1,6 @@
 import groovy.lang.Binding
+import groovy.lang.Closure
+import groovy.lang.GroovyObjectSupport
 import groovy.lang.GroovyShell
 import java.util.concurrent.CompletableFuture
 
@@ -6,16 +8,38 @@ import java.util.concurrent.CompletableFuture
  * @author Ewan
  */
 object Groovy {
-    fun evaluate(symbol: Term.Value.Atom.Symbol, script: String, args: Map<String, Data>, computer: Computer): Term {
+    fun evaluate(symbol: Term.Value.Atom.Symbol, script: String, args: Map<String, Data>, options: Map<String, Data>, computer: Computer): Term {
         val syntheticFilename = symbol.value.toString()
-        val binding = Binding(args)
-        return Term.of(GroovyShell(binding).evaluate(script, syntheticFilename))
+        val binding = Binding(args.mapKeys { "_${it.key}" } + Pair("async", AsyncBlock(args)))
+        val shell = GroovyShell(binding)
+        val wrappedScript = args
+            .map { "def get${it.key.capitalize()}() { _${it.key}.value.get() }" }
+            .joinToString(separator = "\n")
+            .plus("\n$script")
+        return Term.of(shell.evaluate(wrappedScript, syntheticFilename))
+    }
+}
+
+class AsyncBlock(private val args: Map<String, Data>): GroovyObjectSupport() {
+    @Suppress("unused")
+    fun call(block: Closure<*>) {
+        block.delegate = this
+        block.resolveStrategy = Closure.DELEGATE_ONLY
+        block.call()
+    }
+
+    override fun getProperty(property: String?): Any {
+        return when(property) {
+            in args.keys -> args[property]!!.value
+            else -> super.getProperty(property)
+        }
     }
 }
 
 object GroovyEvaluator: GroovyScriptResolver.Evaluator {
-    override fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>, computer: Computer): Term {
-        return Groovy.evaluate(symbol, source, args, computer)
+    override fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>,
+                          options: Map<String, Data>, computer: Computer): Term {
+        return Groovy.evaluate(symbol, source, args, options, computer)
     }
 }
 

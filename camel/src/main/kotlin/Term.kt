@@ -82,6 +82,15 @@ sealed class Term {
                 else -> throw SyntaxError("Cannot create Term from ${value::class} '$value'")
             }
         }
+        fun symbol(prefix: String, name: String) = Term.Value.Atom.Symbol(Symbol.newSymbol(prefix, name))
+        fun symbol(name: String) = Term.Value.Atom.Symbol(Symbol.newSymbol(name))
+        fun string(value: String) = Term.Value.Atom.String(value)
+        fun keyword(prefix: String, name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(prefix, name))
+        fun keyword(name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(name))
+        fun map(vararg pairs: Pair<Term.Value.Atom.Keyword, Term>) = Term.Value.Container.KeywordMap(mapOf(*pairs))
+        fun map(vararg pairs: Pair<Term, Term>) = Term.Value.Container.Map(mapOf(*pairs))
+        fun bool(value: Boolean) = Term.Value.Atom.Bool(value)
+        val nil = Term.Value.Atom.Nil
     }
 }
 

@@ -53,37 +53,44 @@ class HttpResolver(private val client: Client) : FunctionApplicator {
 }
 
 class GroovyScriptResolver(private val evaluator: Evaluator) : FunctionApplicator {
-    override val requiredArgs by lazy { listOf(sourceParameter, argsParameter) }
+    override val requiredArgs by lazy { listOf(sourceParameter, argsParameter, optionsParameter) }
 
     override fun canTransform(term: Term) = term is Term.FunctionApplication &&
-        term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil && argsTerm(term) != Term.Value.Atom.Nil
+        term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil
 
     override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term {
         val source = args[sourceParameter]!!.value.get() as String
-        val scriptArgs =  (args[argsParameter]!!.value.get() as Map<*, *>).map { Pair((it.key as Data).value.get().toString(), it.value as Data) }.toMap()
-        return evaluator.evaluate(symbol, source, scriptArgs, computer)
+        val scriptArgs =  (args[argsParameter]?.value?.get() as? Map<*, *>)
+            ?.map { Pair(((it.key as Data).value.get() as Keyword).name, it.value as Data) }?.toMap() ?: mapOf()
+        val options = (args[optionsParameter]?.value?.get() as? Map<*, *>)
+            ?.map { Pair(((it.key as Data).value.get() as Keyword).name, it.value as Data) }?.toMap() ?: mapOf()
+        return evaluator.evaluate(symbol, source, scriptArgs, options, computer)
     }
 
     private fun sourceTerm(term: Term.FunctionApplication) = term.args.value[sourceParameter]!!
 
-    private fun argsTerm(term: Term.FunctionApplication) = term.args.value[argsParameter]!!
-
     companion object {
         private val namespace = "sys.scripting.groovy"
-        val sourceParameter = Term.Value.Atom.Keyword(Keyword.newKeyword(namespace, "source"))
-        private val argsParameter = Term.Value.Atom.Keyword(Keyword.newKeyword(namespace, "args"))
-        val groovyFn = Term.Value.Atom.Symbol(Symbol.newSymbol("sys.scripting.groovy", "eval")!!)
-        fun forSourceAndArgs(source: Term, args: Term) = Term.FunctionApplication(groovyFn, Term.Value.Container.KeywordMap(mapOf(sourceParameter to source, argsParameter to args)))
+        val sourceParameter = Term.keyword(namespace, "source")
+        private val argsParameter = Term.keyword(namespace, "args")
+        val optionsParameter = Term.keyword(namespace, "options")
+        val groovyFn = Term.symbol(namespace, "eval")
+        fun forSourceAndArgsAndOptions(source: Term, args: Term, options: Term) =
+            Term.FunctionApplication(groovyFn, Term.map(
+                sourceParameter to source,
+                argsParameter to args,
+                optionsParameter to options
+            ))
     }
 
     interface Evaluator {
-        fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>, computer: Computer): Term
+        fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>, options: Map<String, Data>, computer: Computer): Term
     }
 }
 
-class FunctionToGroovyUriScriptSubstituter(symbol: Term.Value.Atom.Symbol, url: Term): GeneralSubstituter(
+class FunctionToGroovyUriScriptSubstituter(symbol: Term.Value.Atom.Symbol, url: Term, options: Term = Term.nil): GeneralSubstituter(
     { (fn) -> fn == symbol },
-    { fnApply -> GroovyScriptResolver.forSourceAndArgs(HttpResolver.forUrl(url), fnApply.args) }
+    { fnApply -> GroovyScriptResolver.forSourceAndArgsAndOptions(HttpResolver.forUrl(url), fnApply.args, options) }
 )
 
 @Suppress("unused")

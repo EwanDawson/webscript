@@ -1,5 +1,4 @@
 import org.slf4j.LoggerFactory.getLogger
-import us.bpsm.edn.Symbol
 import java.io.PrintStream
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -113,9 +112,19 @@ data class Context constructor(val term: Term,
 class UnresolvableTermException(term: Any?) : Throwable("No resolver found for term '$term'")
 
 fun main(args: Array<String>) {
-    val function = Term.Value.Atom.Symbol(Symbol.newSymbol("two-plus-two"))
-    val url = Term.Value.Atom.String("https://gist.githubusercontent.com/EwanDawson/8f069245a235be93e3b4836b4f4fae61/raw/1ba6e295c8a6b10d1f325a952ddf4a3546bd0415/two-plus-two.groovy")
-    val context = Context(Term.parse("(two-plus-two)")).withResolver(FunctionToGroovyUriScriptSubstituter(function, url))
+    val context = Context(Term.parse("(async-test{:a 1 :b 2})"))
+        .withResolver(FunctionToGroovyUriScriptSubstituter(
+            Term.symbol("two-plus-two"),
+            Term.string("https://gist.githubusercontent.com/EwanDawson/8f069245a235be93e3b4836b4f4fae61/raw/1ba6e295c8a6b10d1f325a952ddf4a3546bd0415/two-plus-two.groovy")
+        ))
+        .withResolver(FunctionToGroovyUriScriptSubstituter(
+            Term.symbol("add"),
+            Term.string("https://gist.githubusercontent.com/EwanDawson/a5aee75d7819978b27c6b73cb5815c36/raw/44a648bdd8a766b45d825911e69db4c4125477f0/add.groovy")
+        ))
+        .withResolver(FunctionToGroovyUriScriptSubstituter(
+            Term.symbol("async-test"),
+            Term.string("https://gist.githubusercontent.com/EwanDawson/d89a881fce76e0f02fca7349b9f6a925/raw/835acd6e1e7369fb7907d852260152b05e25e25f/asyncTest.groovy")
+        ))
     val computer = Computer(context)
     println(computer.evaluate().get().result.value)
     computer.printEvaluationTree(System.out)

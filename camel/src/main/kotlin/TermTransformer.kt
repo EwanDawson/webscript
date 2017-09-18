@@ -1,5 +1,6 @@
 import us.bpsm.edn.Keyword
 import us.bpsm.edn.Symbol
+import java.util.concurrent.CompletableFuture
 
 /**
  * @author Ewan
@@ -17,7 +18,7 @@ interface Substituter: TermTransformer {
 
 interface FunctionApplicator: TermTransformer {
     val requiredArgs: List<Term.Value.Atom.Keyword>
-    fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term
+    fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): CompletableFuture<Term>
     override val type get() = "FunctionApplication"
 }
 
@@ -34,8 +35,9 @@ class HttpResolver(private val client: Client) : FunctionApplicator {
     override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == httpFn && urlTerm(term) != Term.Value.Atom.Nil
 
-    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term.Value.Atom.String {
-        return Term.Value.Atom.String(client.get(args[urlParameter]!!.value.get() as String))
+    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>,
+                       computer: Computer): CompletableFuture<Term> {
+        return client.get(args[urlParameter]!!.value.get() as String).thenApply { Term.of(it) }
     }
 
     private fun urlTerm(term: Term.FunctionApplication) = term.args.value[urlParameter]!!
@@ -48,7 +50,7 @@ class HttpResolver(private val client: Client) : FunctionApplicator {
     }
 
     interface Client {
-        fun get(url: String): String
+        fun get(url: String): CompletableFuture<String>
     }
 }
 
@@ -58,7 +60,7 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : FunctionApplicato
     override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil
 
-    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term {
+    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): CompletableFuture<Term> {
         val source = args[sourceParameter]!!.value.get() as String
         val scriptArgs =  (args[argsParameter]?.value?.get() as? Map<*, *>)
             ?.map { Pair(((it.key as Data).value.get() as Keyword).name, it.value as Data) }?.toMap() ?: mapOf()
@@ -84,7 +86,8 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : FunctionApplicato
     }
 
     interface Evaluator {
-        fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>, options: Map<String, Data>, computer: Computer): Term
+        fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>,
+                     options: Map<String, Data>, computer: Computer): CompletableFuture<Term>
     }
 }
 

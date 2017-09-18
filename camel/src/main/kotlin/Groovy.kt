@@ -8,7 +8,13 @@ import java.util.concurrent.CompletableFuture
  * @author Ewan
  */
 object Groovy {
-    fun evaluate(symbol: Term.Value.Atom.Symbol, script: String, args: Map<String, Data>, options: Map<String, Data>, computer: Computer): Term {
+    fun evaluate(
+        symbol: Term.Value.Atom.Symbol,
+        script: String,
+        args: Map<String, Data>,
+        options: Map<String, Data>,
+        computer: Computer
+    ): CompletableFuture<Term> {
         val syntheticFilename = symbol.value.toString()
         val binding = Binding(args.mapKeys { "_${it.key}" } + Pair("async", AsyncBlock(args)))
         val shell = GroovyShell(binding)
@@ -16,7 +22,9 @@ object Groovy {
             .map { "def get${it.key.capitalize()}() { _${it.key}.value.get() }" }
             .joinToString(separator = "\n")
             .plus("\n$script")
-        return Term.of(shell.evaluate(wrappedScript, syntheticFilename))
+        val result = shell.evaluate(wrappedScript, syntheticFilename)
+        return if (result is CompletableFuture<*>) result.thenApply { Term.of(it) }
+        else CompletableFuture.completedFuture(Term.of(result))
     }
 }
 
@@ -38,7 +46,7 @@ class AsyncBlock(private val args: Map<String, Data>): GroovyObjectSupport() {
 
 object GroovyEvaluator: GroovyScriptResolver.Evaluator {
     override fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>,
-                          options: Map<String, Data>, computer: Computer): Term {
+                          options: Map<String, Data>, computer: Computer): CompletableFuture<Term> {
         return Groovy.evaluate(symbol, source, args, options, computer)
     }
 }

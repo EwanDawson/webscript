@@ -1,4 +1,5 @@
 import org.apache.camel.impl.DefaultCamelContext
+import java.util.concurrent.CompletableFuture
 
 /**
  * @author Ewan
@@ -9,8 +10,8 @@ object Camel {
 }
 
 object CamelHttpClient : HttpResolver.Client {
-    override fun get(url: String): String {
+    override fun get(url: String): CompletableFuture<String> {
         val http4url = url.replaceFirst("://", "4://")
-        return Camel.producer.requestBody(http4url, null, String::class.java)
+        return Camel.producer.asyncRequestBody(http4url, null, String::class.java)
     }
 }

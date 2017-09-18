@@ -46,7 +46,7 @@ class Computer(val context: Context, private val executorService: ExecutorServic
                             val args = operation.args.value
                                 .filter { it.key in resolver.requiredArgs }
                                 .mapValues { Data(it.value, this) }
-                            newTerm = resolver.apply(operation.symbol, args, this)
+                            newTerm = resolver.apply(operation.symbol, args, this).get()
                         }
                         is Substituter -> newTerm = resolver.substitute(term)
                     }

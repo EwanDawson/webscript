@@ -1,15 +1,17 @@
 import us.bpsm.edn.Keyword
 import us.bpsm.edn.Symbol
 import us.bpsm.edn.parser.Parsers
+import us.bpsm.edn.printer.Printers
 import java.math.BigDecimal
 import java.math.BigInteger
+import java.util.*
 
 /**
  * @author Ewan
  */
 sealed class Term {
-    sealed class Value<out T>(open val value: T): Term() {
-        sealed class Atom<out T>(override val value: T) : Value<T>(value) {
+    sealed class Value<out T:Any>(open val value: T): Term() {
+        sealed class Atom<out T:Any>(override val value: T) : Value<T>(value) {
             object Nil : Atom<Nil>(Nil)
             data class String(override val value: kotlin.String): Atom<kotlin.String>(value)
             data class Int(override val value: BigInteger): Atom<BigInteger>(value)
@@ -18,15 +20,31 @@ sealed class Term {
             data class Bool(override val value: Boolean): Atom<Boolean>(value)
             data class Keyword(override val value: us.bpsm.edn.Keyword): Atom<us.bpsm.edn.Keyword>(value)
             data class Symbol(override val value: us.bpsm.edn.Symbol): Atom<us.bpsm.edn.Symbol>(value)
+            override fun unwrap() = value
         }
-        sealed class Container<out T>(override val value: T) : Value<T>(value) {
-            data class List(override val value: kotlin.collections.List<Term>): Container<kotlin.collections.List<Term>>(value)
-            data class Set(override val value: kotlin.collections.Set<Term>): Container<kotlin.collections.Set<Term>>(value)
-            data class Map(override val value: kotlin.collections.Map<Term,Term>): Container<kotlin.collections.Map<Term,Term>>(value)
-            data class KeywordMap(override val value: kotlin.collections.Map<Term.Value.Atom.Keyword, Term>): Container<kotlin.collections.Map<Term.Value.Atom.Keyword, Term>>(value)
+        sealed class Container<out T:Any>(override val value: T) : Value<T>(value) {
+            data class List(override val value: kotlin.collections.List<Term>): Container<kotlin.collections.List<Term>>(value) {
+                override fun unwrap() = value.map { it.unwrap() }
+            }
+            data class Set(override val value: kotlin.collections.Set<Term>): Container<kotlin.collections.Set<Term>>(value) {
+                override fun unwrap() = value.map { it.unwrap() }.toSet()
+            }
+            data class Map(override val value: kotlin.collections.Map<Term,Term>): Container<kotlin.collections.Map<Term,Term>>(value) {
+                override fun unwrap() = value.map { Pair(it.key.unwrap(), it.value.unwrap()) }.toMap()
+            }
+            data class KeywordMap(override val value: kotlin.collections.Map<Term.Value.Atom.Keyword, Term>): Container<kotlin.collections.Map<Term.Value.Atom.Keyword, Term>>(value) {
+                override fun unwrap() = value.map { Pair(it.key.unwrap(), it.value.unwrap()) }.toMap()
+            }
         }
     }
-    data class FunctionApplication(val symbol: Value.Atom.Symbol, val args: Value.Container.KeywordMap = Value.Container.KeywordMap(emptyMap())): Term()
+    data class FunctionApplication(val symbol: Value.Atom.Symbol, val args: Value.Container.KeywordMap = Value.Container.KeywordMap(emptyMap())): Term() {
+        override fun unwrap() = LinkedList<Any?>(listOf(symbol.unwrap(), args.unwrap()))
+    }
+
+    internal abstract fun unwrap(): Any
+
+    fun toEDN() = Printers.printString(Printers.defaultPrinterProtocol(), unwrap())!!
+
     companion object {
         fun parse(edn: kotlin.String): Term {
             val value = Parsers.newParser(Parsers.defaultConfiguration()).nextValue(Parsers.newParseable(edn))

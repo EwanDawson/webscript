@@ -76,8 +76,8 @@ class Computer(val context: Context, private val executorService: ExecutorServic
         if (state != State.COMPLETED) throw IllegalStateException("Computer must complete before evaluation tree can be printed")
         fun write(value: CharSequence) = writer.appendln(" ".repeat(indent) + value)
         write("Computer $id")
-        write("Term: ${context.term}")
-        write("Result: $result")
+        write("Term: ${context.term.toEDN()}")
+        write("Result: ${result.toEDN()}")
         if (children.isNotEmpty()) {
             write("Child computations:")
             children.forEach { it.printEvaluationTree(writer, indent + 4) }

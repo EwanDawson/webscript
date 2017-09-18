@@ -35,7 +35,7 @@ class HttpResolver(private val client: Client) : FunctionApplicator {
         term.symbol == httpFn && urlTerm(term) != Term.Value.Atom.Nil
 
     override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term.Value.Atom.String {
-        return Term.Value.Atom.String(client.get(args[urlParameter]!!.value as String))
+        return Term.Value.Atom.String(client.get(args[urlParameter]!!.value.get() as String))
     }
 
     private fun urlTerm(term: Term.FunctionApplication) = term.args.value[urlParameter]!!
@@ -59,8 +59,8 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : FunctionApplicato
         term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil && argsTerm(term) != Term.Value.Atom.Nil
 
     override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term {
-        val source = args[sourceParameter]!!.value as String
-        val scriptArgs =  (args[argsParameter]!!.value as Map<*, *>).map { Pair((it.key as Data).value.toString(), it.value as Data) }.toMap()
+        val source = args[sourceParameter]!!.value.get() as String
+        val scriptArgs =  (args[argsParameter]!!.value.get() as Map<*, *>).map { Pair((it.key as Data).value.get().toString(), it.value as Data) }.toMap()
         return evaluator.evaluate(symbol, source, scriptArgs, computer)
     }
 

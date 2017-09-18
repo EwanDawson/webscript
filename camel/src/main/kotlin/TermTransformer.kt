@@ -5,42 +5,37 @@ import us.bpsm.edn.Symbol
  * @author Ewan
  */
 
-interface TermTransformer<out To:Term> {
+interface TermTransformer {
     fun canTransform(term: Term): Boolean
-    fun transform(term: Term, computer: Computer): To
+    val type: String
 }
 
-fun resolveToStringTerm(term: Term, computer: Computer): Term.Value.Atom.String {
-    return when (term) {
-        is Term.Value.Atom.String -> term
-        is Term.FunctionApplication -> resolveToStringTerm(computer.evaluate(term).get(), computer)
-        else -> throw IllegalArgumentException("Term must be of type String, not ${term::class}")
-    }
+interface Substituter: TermTransformer {
+    fun substitute(term: Term.FunctionApplication): Term
+    override val type get() = "Substitution"
 }
 
-fun resolveToKeywordMapTerm(term: Term, computer: Computer): Term.Value.Container.KeywordMap {
-    return when (term) {
-        is Term.Value.Container.KeywordMap -> term
-        is Term.FunctionApplication -> resolveToKeywordMapTerm(computer.evaluate(term).get(), computer)
-        else -> throw IllegalArgumentException("Term must be of type KeywordMap, not ${term::class}")
-    }
+interface FunctionApplicator: TermTransformer {
+    val requiredArgs: List<Term.Value.Atom.Keyword>
+    fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term
+    override val type get() = "FunctionApplication"
 }
 
-open class Substituter(private val matcher: (Term.FunctionApplication) -> Boolean, private val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : TermTransformer<Term.FunctionApplication> {
+open class GeneralSubstituter(private val matcher: (Term.FunctionApplication) -> Boolean, private val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : Substituter {
 
     override fun canTransform(term: Term) = term is Term.FunctionApplication && matcher(term)
 
-    override fun transform(term: Term, computer: Computer) = transform(term as Term.FunctionApplication)
+    override fun substitute(term: Term.FunctionApplication) = transform.invoke(term)
 }
 
-class HttpResolver(private val client: Client) : TermTransformer<Term.Value.Atom.String> {
+class HttpResolver(private val client: Client) : FunctionApplicator {
+    override val requiredArgs by lazy { listOf(urlParameter) }
+
     override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == httpFn && urlTerm(term) != Term.Value.Atom.Nil
 
-    override fun transform(term: Term, computer: Computer): Term.Value.Atom.String {
-        val urlTerm = urlTerm(term as Term.FunctionApplication)
-        val url = resolveToStringTerm(urlTerm, computer)
-        return client.get(url)
+    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term.Value.Atom.String {
+        return Term.Value.Atom.String(client.get(args[urlParameter]!!.value as String))
     }
 
     private fun urlTerm(term: Term.FunctionApplication) = term.args.value[urlParameter]!!
@@ -53,19 +48,20 @@ class HttpResolver(private val client: Client) : TermTransformer<Term.Value.Atom
     }
 
     interface Client {
-        fun get(url: Term.Value.Atom.String): Term.Value.Atom.String
+        fun get(url: String): String
     }
 }
 
-class GroovyScriptResolver(private val evaluator: Evaluator) : TermTransformer<Term> {
+class GroovyScriptResolver(private val evaluator: Evaluator) : FunctionApplicator {
+    override val requiredArgs by lazy { listOf(sourceParameter, argsParameter) }
 
     override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil && argsTerm(term) != Term.Value.Atom.Nil
 
-    override fun transform(term: Term, computer: Computer): Term {
-        val sourceArg = resolveToStringTerm(sourceTerm(term as Term.FunctionApplication), computer)
-        val argsMap = resolveToKeywordMapTerm(argsTerm(term), computer)
-        return evaluator.evaluate(term.symbol, sourceArg, argsMap, computer)
+    override fun apply(symbol: Term.Value.Atom.Symbol, args: Map<Term.Value.Atom.Keyword, Data>, computer: Computer): Term {
+        val source = args[sourceParameter]!!.value as String
+        val scriptArgs =  (args[argsParameter]!!.value as Map<*, *>).map { Pair((it.key as Data).value.toString(), it.value as Data) }.toMap()
+        return evaluator.evaluate(symbol, source, scriptArgs, computer)
     }
 
     private fun sourceTerm(term: Term.FunctionApplication) = term.args.value[sourceParameter]!!
@@ -81,17 +77,17 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : TermTransformer<T
     }
 
     interface Evaluator {
-        fun evaluate(symbol: Term.Value.Atom.Symbol, source: Term.Value.Atom.String, args: Term.Value.Container.KeywordMap, computer: Computer): Term
+        fun evaluate(symbol: Term.Value.Atom.Symbol, source: String, args: Map<String, Data>, computer: Computer): Term
     }
 }
 
-class FunctionToGroovyUriScriptSubstituter(symbol: Term.Value.Atom.Symbol, url: Term): Substituter(
+class FunctionToGroovyUriScriptSubstituter(symbol: Term.Value.Atom.Symbol, url: Term): GeneralSubstituter(
     { (fn) -> fn == symbol },
     { fnApply -> GroovyScriptResolver.forSourceAndArgs(HttpResolver.forUrl(url), fnApply.args) }
 )
 
 @Suppress("unused")
-class FunctionRenamer(from: Term.Value.Atom.Symbol, to: Term.Value.Atom.Symbol): Substituter(
+class FunctionRenamer(from: Term.Value.Atom.Symbol, to: Term.Value.Atom.Symbol): GeneralSubstituter(
     { (fn) -> fn == from },
     { fnApply -> Term.FunctionApplication(to, Term.Value.Container.KeywordMap(fnApply.args.value.mapKeys { Term.Value.Atom.Keyword(Keyword.newKeyword(to.value.prefix, it.key.value.name))  })) }
 )

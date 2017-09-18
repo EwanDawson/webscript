@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.supplyAsync
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 
 /**
@@ -19,64 +19,65 @@ class Computer(val context: Context, private val executorService: ExecutorServic
     val id = UUID.randomUUID().toString()
 
     private val log = getLogger("Computer_${id.takeLast(6)}")
-    private var state = State.UNSTARTED
 
-    private var computedTerm: Term.Value<*>? = null
-    val result: Term.Value<*>
-        get() = ifCompletedOrError { computedTerm!! }
+    private var _state = AtomicReference<State>(State.UNSTARTED)
+    val state get() = _state.get()!!
 
-    private val childrenInProgress: MutableList<Computer> = mutableListOf()
-    val children: List<Computer>
-        get() = ifCompletedOrError { childrenInProgress.toList() }
+    private var _result: Term.Value<*> = Term.Value.Atom.Nil
+    val result get() = _result
 
-    private fun <T> ifCompletedOrError(supplier: () -> T): T {
-        if (state == State.COMPLETED) return supplier.invoke()
-        else throw IllegalStateException("Computation has not completed")
-    }
+    private val _children = AtomicReference<List<Computer>>(listOf())
+    val children get() = _children.get()!!
 
-    fun evaluate(): Future<Term.Value<*>> {
-        if (state == State.UNSTARTED) {
-            state = State.RUNNING
-            try {
-                val term = context.term
-                return when (term) {
-                    is Term.Value<*> -> {
-                        computedTerm = term
-                        CompletableFuture.completedFuture(term)
+    private val _steps = AtomicReference<List<Step>>(listOf())
+    val steps get() = _steps.get()!!
+
+    fun evaluate(): CompletableFuture<Computer> {
+        if (_state.compareAndSet(State.UNSTARTED, State.RUNNING)) {
+            return supplyAsync(Supplier<Computer>{
+                var term = context.term
+                while (term !is Term.Value<*>) {
+                    var newTerm = term
+                    val operation = term as Term.FunctionApplication
+                    log.info("Evaluating: $operation")
+                    val resolver = context.transformers.find { it.canTransform(operation) }
+                    when (resolver) {
+                        null -> throw UnresolvableTermException(operation)
+                        is FunctionApplicator -> {
+                            val args = operation.args.value
+                                .filter { it.key in resolver.requiredArgs }
+                                .mapValues { Data(it.value, this) }
+                            newTerm = resolver.apply(operation.symbol, args, this)
+                        }
+                        is Substituter -> newTerm = resolver.substitute(term)
                     }
-                    is Term.FunctionApplication -> {
-                        log.info("Evaluating: $term")
-                        val resolver = context.transformers.find { it.canTransform(term) }
-                        if (resolver != null) return supplyAsync(Supplier<Term.Value<*>> {
-                            val resolvedTerm = resolver.transform(term, this)
-                            computedTerm = when (resolvedTerm) {
-                                is Term.FunctionApplication -> evaluate(resolvedTerm).get()
-                                is Term.Value<*> -> resolvedTerm
-                            }
-                            log.info("Result: $computedTerm")
-                            computedTerm!!
-                        }, executorService)
-                        else throw UnresolvableTermException(term)
-                    }
+                    _steps.updateAndGet { it + listOf(Step(this, resolver!!, term, newTerm))  }
+                    term = newTerm
                 }
-            } finally {
-                state = State.COMPLETED
-            }
+                _result = term
+                _state.set(State.COMPLETED)
+                return@Supplier this
+            }, executorService)
         }
         else throw IllegalStateException("Computation has already been run")
     }
 
-    fun evaluate(term: Term.FunctionApplication) : Future<Term.Value<*>> {
+    fun evaluate(term: Term.FunctionApplication) : CompletableFuture<Computer> {
         val childComputation = Computer(context.copy(term = term), executorService)
-        childrenInProgress.add(childComputation)
-        return childComputation.evaluate()
+        _children.updateAndGet { it + listOf(childComputation) }
+        val future = childComputation.evaluate()
+        future.thenAccept { result -> _steps.updateAndGet { it + result.steps } }
+        return future
     }
 
     fun printEvaluationTree(writer: PrintStream, indent: Int = 0) {
-        if (state != State.COMPLETED) throw IllegalStateException("Computer must complete before evaluation tree can be printed")
         fun write(value: CharSequence) = writer.appendln(" ".repeat(indent) + value)
         write("Computer $id")
+        write("State $state")
         write("Term: ${context.term.toEDN()}")
+        steps.forEachIndexed { index, step ->
+            write("Step $index: $step")
+        }
         write("Result: ${result.toEDN()}")
         if (children.isNotEmpty()) {
             write("Child computations:")
@@ -85,23 +86,28 @@ class Computer(val context: Context, private val executorService: ExecutorServic
     }
 
     override fun toString(): String {
-        return "Computer(id='$id', state=$state, context=$context)"
+        return "Computer(id='$id', state=$_state, context=$context)"
     }
 
-    private enum class State { UNSTARTED, RUNNING, COMPLETED }
+    enum class State { UNSTARTED, RUNNING, COMPLETED }
 
 
 }
 
+data class Step internal constructor(val computer: String, val type: String, val from: String, val to: String) {
+    constructor(computer: Computer, transformer: TermTransformer, from: Term, to: Term)
+        : this(computer.id.takeLast(6), transformer.type, from.toEDN(), to.toEDN())
+}
+
 data class Context constructor(val term: Term,
-                               val transformers: List<TermTransformer<*>> = listOf(
+                               val transformers: List<TermTransformer> = listOf(
                                    HttpResolver(CamelHttpClient),
                                    GroovyScriptResolver(GroovyEvaluator)
                                )) {
 
     val id = UUID.randomUUID().toString()
 
-    fun withResolver(transformer: TermTransformer<*>) = copy(transformers = listOf(transformer) + transformers)
+    fun withResolver(transformer: TermTransformer) = copy(transformers = listOf(transformer) + transformers)
 }
 
 class UnresolvableTermException(term: Any?) : Throwable("No resolver found for term '$term'")
@@ -111,7 +117,7 @@ fun main(args: Array<String>) {
     val url = Term.Value.Atom.String("https://gist.githubusercontent.com/EwanDawson/8f069245a235be93e3b4836b4f4fae61/raw/1ba6e295c8a6b10d1f325a952ddf4a3546bd0415/two-plus-two.groovy")
     val context = Context(Term.parse("(two-plus-two)")).withResolver(FunctionToGroovyUriScriptSubstituter(function, url))
     val computer = Computer(context)
-    println(computer.evaluate().get().value)
+    println(computer.evaluate().get().result.value)
     computer.printEvaluationTree(System.out)
     defaultExecutorService.shutdown()
 }

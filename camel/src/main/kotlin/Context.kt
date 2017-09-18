@@ -46,9 +46,9 @@ class Computer(val context: Context, private val executorService: ExecutorServic
                     }
                     is Term.FunctionApplication -> {
                         log.info("Evaluating: $term")
-                        val resolver = context.resolvers.find { it.canResolve(term) }
+                        val resolver = context.transformers.find { it.canTransform(term) }
                         if (resolver != null) return supplyAsync(Supplier<Term.Value<*>> {
-                            val resolvedTerm = resolver.resolve(term, this)
+                            val resolvedTerm = resolver.transform(term, this)
                             computedTerm = when (resolvedTerm) {
                                 is Term.FunctionApplication -> evaluate(resolvedTerm).get()
                                 is Term.Value<*> -> resolvedTerm
@@ -94,14 +94,14 @@ class Computer(val context: Context, private val executorService: ExecutorServic
 }
 
 data class Context constructor(val term: Term,
-                               val resolvers: List<TermResolver<*>> = listOf(
+                               val transformers: List<TermTransformer<*>> = listOf(
                                    HttpResolver(CamelHttpClient),
                                    GroovyScriptResolver(GroovyEvaluator)
                                )) {
 
     val id = UUID.randomUUID().toString()
 
-    fun withResolver(resolver: TermResolver<*>) = copy(resolvers = listOf(resolver) + resolvers)
+    fun withResolver(transformer: TermTransformer<*>) = copy(transformers = listOf(transformer) + transformers)
 }
 
 class UnresolvableTermException(term: Any?) : Throwable("No resolver found for term '$term'")
@@ -109,7 +109,7 @@ class UnresolvableTermException(term: Any?) : Throwable("No resolver found for t
 fun main(args: Array<String>) {
     val function = Term.Value.Atom.Symbol(Symbol.newSymbol("two-plus-two"))
     val url = Term.Value.Atom.String("https://gist.githubusercontent.com/EwanDawson/8f069245a235be93e3b4836b4f4fae61/raw/1ba6e295c8a6b10d1f325a952ddf4a3546bd0415/two-plus-two.groovy")
-    val context = Context(Term.parse("(two-plus-two)")).withResolver(GroovyUriScriptResolver(function, url))
+    val context = Context(Term.parse("(two-plus-two)")).withResolver(FunctionToGroovyUriScriptSubstituter(function, url))
     val computer = Computer(context)
     println(computer.evaluate().get().value)
     computer.printEvaluationTree(System.out)

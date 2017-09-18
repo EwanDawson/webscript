@@ -5,9 +5,9 @@ import us.bpsm.edn.Symbol
  * @author Ewan
  */
 
-interface TermResolver<out To:Term> {
-    fun canResolve(term: Term): Boolean
-    fun resolve(term: Term, computer: Computer): To
+interface TermTransformer<out To:Term> {
+    fun canTransform(term: Term): Boolean
+    fun transform(term: Term, computer: Computer): To
 }
 
 fun resolveToStringTerm(term: Term, computer: Computer): Term.Value.Atom.String {
@@ -26,18 +26,18 @@ fun resolveToKeywordMapTerm(term: Term, computer: Computer): Term.Value.Containe
     }
 }
 
-open class SubstitutingResolver(private val matcher: (Term.FunctionApplication) -> Boolean, private val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : TermResolver<Term.FunctionApplication> {
+open class Substituter(private val matcher: (Term.FunctionApplication) -> Boolean, private val transform: (Term.FunctionApplication) -> Term.FunctionApplication) : TermTransformer<Term.FunctionApplication> {
 
-    override fun canResolve(term: Term) = term is Term.FunctionApplication && matcher(term)
+    override fun canTransform(term: Term) = term is Term.FunctionApplication && matcher(term)
 
-    override fun resolve(term: Term, computer: Computer) = transform(term as Term.FunctionApplication)
+    override fun transform(term: Term, computer: Computer) = transform(term as Term.FunctionApplication)
 }
 
-class HttpResolver(private val client: Client) : TermResolver<Term.Value.Atom.String> {
-    override fun canResolve(term: Term) = term is Term.FunctionApplication &&
+class HttpResolver(private val client: Client) : TermTransformer<Term.Value.Atom.String> {
+    override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == httpFn && urlTerm(term) != Term.Value.Atom.Nil
 
-    override fun resolve(term: Term, computer: Computer): Term.Value.Atom.String {
+    override fun transform(term: Term, computer: Computer): Term.Value.Atom.String {
         val urlTerm = urlTerm(term as Term.FunctionApplication)
         val url = resolveToStringTerm(urlTerm, computer)
         return client.get(url)
@@ -57,12 +57,12 @@ class HttpResolver(private val client: Client) : TermResolver<Term.Value.Atom.St
     }
 }
 
-class GroovyScriptResolver(private val evaluator: Evaluator) : TermResolver<Term> {
+class GroovyScriptResolver(private val evaluator: Evaluator) : TermTransformer<Term> {
 
-    override fun canResolve(term: Term) = term is Term.FunctionApplication &&
+    override fun canTransform(term: Term) = term is Term.FunctionApplication &&
         term.symbol == groovyFn && sourceTerm(term) != Term.Value.Atom.Nil && argsTerm(term) != Term.Value.Atom.Nil
 
-    override fun resolve(term: Term, computer: Computer): Term {
+    override fun transform(term: Term, computer: Computer): Term {
         val sourceArg = resolveToStringTerm(sourceTerm(term as Term.FunctionApplication), computer)
         val argsMap = resolveToKeywordMapTerm(argsTerm(term), computer)
         return evaluator.evaluate(term.symbol, sourceArg, argsMap, computer)
@@ -85,13 +85,13 @@ class GroovyScriptResolver(private val evaluator: Evaluator) : TermResolver<Term
     }
 }
 
-class GroovyUriScriptResolver(symbol: Term.Value.Atom.Symbol, url: Term): SubstitutingResolver(
+class FunctionToGroovyUriScriptSubstituter(symbol: Term.Value.Atom.Symbol, url: Term): Substituter(
     { (fn) -> fn == symbol },
     { fnApply -> GroovyScriptResolver.forSourceAndArgs(HttpResolver.forUrl(url), fnApply.args) }
 )
 
 @Suppress("unused")
-class FunctionRenameResolver(from: Term.Value.Atom.Symbol, to: Term.Value.Atom.Symbol): SubstitutingResolver(
+class FunctionRenamer(from: Term.Value.Atom.Symbol, to: Term.Value.Atom.Symbol): Substituter(
     { (fn) -> fn == from },
     { fnApply -> Term.FunctionApplication(to, Term.Value.Container.KeywordMap(fnApply.args.value.mapKeys { Term.Value.Atom.Keyword(Keyword.newKeyword(to.value.prefix, it.key.value.name))  })) }
 )

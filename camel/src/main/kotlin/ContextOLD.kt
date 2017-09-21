@@ -14,7 +14,8 @@ import java.util.function.Supplier
 
 val defaultExecutorService: ExecutorService = Executors.newCachedThreadPool()
 
-class Computer(val context: Context, private val executorService: ExecutorService = defaultExecutorService) {
+class Computer_OLD(val context: ContextOLD, private val executorService: ExecutorService = defaultExecutorService,
+                   private val cache: Cache = HashMapCache) {
     val id = UUID.randomUUID().toString()
 
     private val log = getLogger("Computer_${id.takeLast(6)}")
@@ -25,16 +26,22 @@ class Computer(val context: Context, private val executorService: ExecutorServic
     private var _result: Term.Value<*> = Term.Value.Atom.Nil
     val result get() = _result
 
-    private val _children = AtomicReference<List<Computer>>(listOf())
+    private val _children = AtomicReference<List<Computer_OLD>>(listOf())
     val children get() = _children.get()!!
 
-    private val _steps = AtomicReference<List<Step>>(listOf())
+    private val _steps = AtomicReference<List<StepOLD>>(listOf())
     val steps get() = _steps.get()!!
 
-    fun evaluate(): CompletableFuture<Computer> {
+    fun evaluate(): CompletableFuture<Computer_OLD> {
         if (_state.compareAndSet(State.UNSTARTED, State.RUNNING)) {
-            return supplyAsync(Supplier<Computer>{
-                var term = context.term
+            return supplyAsync(Supplier<Computer_OLD>{
+                val cached = cache.get(context)
+                var term = if (cached != null) {
+                    _steps.updateAndGet { it + listOf(StepOLD()) }
+                    cached
+                } else {
+                    context.term
+                }
                 while (term !is Term.Value<*>) {
                     var newTerm = term
                     val operation = term as Term.FunctionApplication
@@ -50,7 +57,7 @@ class Computer(val context: Context, private val executorService: ExecutorServic
                         }
                         is Substituter -> newTerm = resolver.substitute(term)
                     }
-                    _steps.updateAndGet { it + listOf(Step(this, resolver!!, term, newTerm))  }
+                    _steps.updateAndGet { it + listOf(StepOLD(this, resolver!!, term, newTerm))  }
                     term = newTerm
                 }
                 _result = term
@@ -61,8 +68,8 @@ class Computer(val context: Context, private val executorService: ExecutorServic
         else throw IllegalStateException("Computation has already been run")
     }
 
-    fun evaluate(term: Term.FunctionApplication) : CompletableFuture<Computer> {
-        val childComputation = Computer(context.copy(term = term), executorService)
+    fun evaluate(term: Term.FunctionApplication) : CompletableFuture<Computer_OLD> {
+        val childComputation = Computer_OLD(context.copy(term = term), executorService)
         _children.updateAndGet { it + listOf(childComputation) }
         val future = childComputation.evaluate()
         future.thenAccept { result -> _steps.updateAndGet { it + result.steps } }
@@ -93,15 +100,15 @@ class Computer(val context: Context, private val executorService: ExecutorServic
 
 }
 
-data class Step internal constructor(val computer: String, val type: String, val from: String, val to: String) {
-    constructor(computer: Computer, transformer: TermTransformer, from: Term, to: Term)
+data class StepOLD internal constructor(val computer: String, val type: String, val from: String, val to: String) {
+    constructor(computer: Computer_OLD, transformer: TermTransformer, from: Term, to: Term)
         : this(computer.id.takeLast(6), transformer.type, from.toEDN(), to.toEDN())
 }
 
-data class Context constructor(val term: Term,
-                               val transformers: List<TermTransformer> = listOf(
+data class ContextOLD constructor(val term: Term,
+                                  val transformers: List<TermTransformer> = listOf(
                                    HttpResolver(CamelHttpClient),
-                                   GroovyScriptResolver(GroovyEvaluator)
+                                   GroovyScriptInvoker(GroovyEvaluator)
                                )) {
 
     val id = UUID.randomUUID().toString()
@@ -109,10 +116,8 @@ data class Context constructor(val term: Term,
     fun withResolver(transformer: TermTransformer) = copy(transformers = listOf(transformer) + transformers)
 }
 
-class UnresolvableTermException(term: Any?) : Throwable("No resolver found for term '$term'")
-
 fun main(args: Array<String>) {
-    val context = Context(Term.parse("(async-test{:a 1 :b 2})"))
+    val context = ContextOLD(Term.parse("(async-test{:a 1 :b 2})"))
         .withResolver(FunctionToGroovyUriScriptSubstituter(
             Term.symbol("two-plus-two"),
             Term.string("https://gist.githubusercontent.com/EwanDawson/8f069245a235be93e3b4836b4f4fae61/raw/1ba6e295c8a6b10d1f325a952ddf4a3546bd0415/two-plus-two.groovy")
@@ -125,7 +130,7 @@ fun main(args: Array<String>) {
             Term.symbol("async-test"),
             Term.string("https://gist.githubusercontent.com/EwanDawson/d89a881fce76e0f02fca7349b9f6a925/raw/835acd6e1e7369fb7907d852260152b05e25e25f/asyncTest.groovy")
         ))
-    val computer = Computer(context)
+    val computer = Computer_OLD(context)
     println(computer.evaluate().get().result.value)
     computer.printEvaluationTree(System.out)
     defaultExecutorService.shutdown()

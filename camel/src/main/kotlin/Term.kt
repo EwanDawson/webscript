@@ -37,8 +37,8 @@ sealed class Term {
             }
         }
     }
-    data class FunctionApplication(val symbol: Value.Atom.Symbol, val args: Value.Container.KeywordMap = Value.Container.KeywordMap(emptyMap())): Term() {
-        override fun unwrap() = LinkedList<Any?>(listOf(symbol.unwrap(), args.unwrap()))
+    data class FunctionApplication(val symbol: Value.Atom.Symbol, val args: List<Term> = emptyList()): Term() {
+        override fun unwrap() = LinkedList<Any?>(listOf(symbol.unwrap()) +  args.map { it.unwrap() })
     }
 
     internal abstract fun unwrap(): Any
@@ -51,44 +51,51 @@ sealed class Term {
             return of(value)
         }
         fun of(value: Any?): Term {
-            return if (value == null) Value.Atom.Nil else when (value) {
+            return if (value == null) nil else when (value) {
                 is Term -> value
-                is String -> Value.Atom.String(value)
-                is BigInteger -> Value.Atom.Int(value)
-                is Long -> Value.Atom.Int(BigInteger.valueOf(value))
-                is Int -> Value.Atom.Int(BigInteger.valueOf(value.toLong()))
-                is BigDecimal -> Value.Atom.Decimal(value)
-                is Double -> Value.Atom.Decimal(BigDecimal.valueOf(value))
-                is Float -> Value.Atom.Decimal(BigDecimal.valueOf(value.toDouble()))
-                is Char -> Value.Atom.Char(value)
-                is Boolean -> Value.Atom.Bool(value)
-                is Symbol -> Value.Atom.Symbol(value)
-                is Keyword -> Value.Atom.Keyword(value)
-                is RandomAccess -> Value.Container.List((value as kotlin.collections.List<*>).map { of(it) })
-                is kotlin.collections.Set<*> -> Value.Container.Set(value.map { of(it) }.toSet())
-                is kotlin.collections.Map<*,*> -> Value.Container.Map(value.map { Pair(of(it.key), of(it.value)) }.toMap())
-                is kotlin.collections.List<*> -> {
-                    if (value.size < 1 || value.size > 2) throw SyntaxError("Bad function application")
+                is String -> string(value)
+                is BigInteger -> int(value)
+                is Long -> int(value)
+                is Int -> int(value)
+                is BigDecimal -> decimal(value)
+                is Double -> decimal(value)
+                is Float -> decimal(value)
+                is Char -> char(value)
+                is Boolean -> bool(value)
+                is Symbol -> symbol(value)
+                is Keyword -> keyword(value)
+                is RandomAccess -> list(value as List<Any?>)
+                is Set<*> -> set(value)
+                is Map<*,*> -> map(value)
+                is List<*> -> {
+                    if (value.isEmpty()) throw SyntaxError("Bad function application")
                     val identifier = value[0] as? Symbol ?: throw SyntaxError("Bad function application")
-                    if (value.size == 1) FunctionApplication(Value.Atom.Symbol(identifier))
-                    else {
-                        val args = value[1]
-                        when (args) {
-                            is kotlin.collections.Map<*,*> -> FunctionApplication(Value.Atom.Symbol(identifier), Value.Container.KeywordMap(args.map { Pair(Term.Value.Atom.Keyword(it.key as Keyword), of(it.value)) }.toMap()))
-                            else -> throw SyntaxError("Bad function application")
-                        }
-                    }
+                    function(identifier, value.drop(1).map { of(it) })
                 }
                 else -> throw SyntaxError("Cannot create Term from ${value::class} '$value'")
             }
         }
+        fun function(symbol: Symbol, args: List<Any?>) = Term.FunctionApplication(symbol(symbol), args.map { of(it) })
+        fun function(symbol: Value.Atom.Symbol, args: List<Term>) = Term.FunctionApplication(symbol, args)
         fun symbol(prefix: String, name: String) = Term.Value.Atom.Symbol(Symbol.newSymbol(prefix, name))
         fun symbol(name: String) = Term.Value.Atom.Symbol(Symbol.newSymbol(name))
+        fun symbol(symbol: Symbol) = Term.Value.Atom.Symbol(symbol)
         fun string(value: String) = Term.Value.Atom.String(value)
+        fun int(value: Int) = Term.Value.Atom.Int(BigInteger.valueOf(value.toLong()))
+        fun int(value: Long) = Term.Value.Atom.Int(BigInteger.valueOf(value))
+        fun int(value: BigInteger) = Term.Value.Atom.Int(value)
+        fun decimal(value: Float) = Term.Value.Atom.Decimal(BigDecimal.valueOf(value.toDouble()))
+        fun decimal(value: Double) = Term.Value.Atom.Decimal(BigDecimal.valueOf(value))
+        fun decimal(value: BigDecimal) = Term.Value.Atom.Decimal(value)
+        fun char(value: Char) = Term.Value.Atom.Char(value)
+        fun keyword(keyword: Keyword) = Term.Value.Atom.Keyword(keyword)
         fun keyword(prefix: String, name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(prefix, name))
         fun keyword(name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(name))
+        fun list(value: List<Any?>) = Term.Value.Container.List(value.map { of(it) })
         fun map(vararg pairs: Pair<Term.Value.Atom.Keyword, Term>) = Term.Value.Container.KeywordMap(mapOf(*pairs))
         fun map(vararg pairs: Pair<Term, Term>) = Term.Value.Container.Map(mapOf(*pairs))
+        fun map(value: Map<*, *>) = Term.Value.Container.Map(value.map { Pair(of(it.key), of(it.value)) }.toMap())
+        fun set(value: Set<Any?>) = Term.Value.Container.Set(value.map { of(it) }.toSet())
         fun bool(value: Boolean) = Term.Value.Atom.Bool(value)
         val nil = Term.Value.Atom.Nil
     }

@@ -3,6 +3,7 @@ import groovy.lang.Closure
 import groovy.lang.GroovyObjectSupport
 import groovy.lang.GroovyShell
 import java.util.concurrent.CompletableFuture
+import java.util.function.Supplier
 
 /**
  * @author Ewan
@@ -15,7 +16,10 @@ object Groovy {
         computer: Computer
     ): Any? {
         val syntheticFilename = symbol.value.toString()
-        val binding = Binding(args.mapKeys { "_${it.key}" } + Pair("async", AsyncBlock(args)))
+        val binding = Binding(args
+            .mapKeys { "_${it.key}" }
+            + Pair("async", AsyncBlock(args))
+        )
         val shell = GroovyShell(binding)
         val wrappedScript = args
             .map { "def get${it.key.capitalize()}() { _${it.key}.value.get() }" }
@@ -43,32 +47,50 @@ class AsyncBlock(private val args: Map<String, Data>): GroovyObjectSupport() {
     }
 }
 
-object GroovyEvaluator: GroovyScriptInvoker.GroovyScriptEvaluator {
+class GroovyEvaluator: GroovyScriptInvoker.GroovyScriptEvaluator {
+    private val argEvaluations = mutableListOf<FunctionEvaluation>()
     override fun evaluate(
         symbol: Term.Value.Atom.Symbol,
         source: Term.Value.Atom.String,
-        args: Term.Value.Container.KeywordMap,
+        args: Term.Value.Container.Map,
         context: Context,
         computer: Computer
-    ): Term {
-        val argsData = args.value.map { Pair(it.key.value.name, Data(it.value, context, computer)) }.toMap()
-        val result = Groovy.evaluate(symbol, source.value, argsData, computer)
-        return Term.of(result)
+    ): ScriptEvaluationResult {
+        val argsData = args.value.map {
+            Pair((it.key as Term.Value.Atom.Keyword).value.name,
+                Data(it.value, context, computer, argEvaluations)
+            )
+        }.toMap()
+        val result = (Groovy.evaluate(symbol, source.value, argsData, computer) as CompletableFuture<*>).get()
+        return ScriptEvaluationResult(Term.of(result), argEvaluations.toList())
     }
 }
 
-class Data(private val term: Term, private val context: Context, private val computer: Computer) {
+data class ScriptEvaluationResult(val result: Term, val argEvaluations: List<FunctionEvaluation>)
+
+class Data(
+    private val term: Term,
+    private val context: Context,
+    private val computer: Computer,
+    private val evaluations: MutableList<FunctionEvaluation>
+) {
     @Suppress("unused")
     val value: Any?
-        get() = when (term) {
-            is Term.Value.Atom<*> -> if (term == Term.Value.Atom.Nil) null else term.value
-            is Term.Value.Container.List -> term.value.map { Data(it, context, computer) }
-            is Term.Value.Container.Set -> term.value.map { Data(it, context, computer) }.toSet()
-            is Term.Value.Container.Map -> term.value.map { Pair(Data(it.key, context, computer), Data(it.value, context, computer)) }.toMap()
-            is Term.Value.Container.KeywordMap -> term.value.map { Pair(Data(it.key, context, computer), Data(it.value, context, computer)) }.toMap()
-            is Term.FunctionApplication -> Data(computer.evaluate(term, context).outputTerm, context, computer)
-            // TODO: Get these sub-evaluations into the list of steps held in the GroovyScriptInvoker
+        get() = Supplier {
+            when (term) {
+                is Term.Value.Atom<*> -> if (term == Term.Value.Atom.Nil) null else term.value
+                is Term.Value.Container.List -> term.value.map { data(it) }
+                is Term.Value.Container.Set -> term.value.map { data(it) }.toSet()
+                is Term.Value.Container.Map -> term.value.map { Pair(data(it.key), data(it.value)) }.toMap()
+                is Term.Value.Container.KeywordMap -> term.value.map { Pair(data(it.key), data(it.value)) }.toMap()
+                is Term.FunctionApplication -> {
+                    val evaluation = computer.evaluate(term, context)
+                    evaluations.add(evaluation)
+                    data(evaluation.outputTerm)
+                }
+            }
         }
+    private fun data(term: Term) = Data(term, context, computer, evaluations)
 }
 
 class GroovyScriptInvoker(private val computer: Computer, private val evaluator: GroovyScriptEvaluator) : FunctionInvoker {
@@ -96,9 +118,10 @@ class GroovyScriptInvoker(private val computer: Computer, private val evaluator:
                 steps.add(evaluation)
                 evaluation.outputTerm
             }
-        } as? Term.Value.Container.KeywordMap ?: throw IllegalArgumentException("Script args must be of type KeywordMap")
-        val result = evaluator.evaluate(term.symbol, source, args, context, computer)
-        return FunctionInvocation(namespace, term, result, context, context, steps.toList())
+        } as? Term.Value.Container.Map ?: throw IllegalArgumentException("Script args must be of type KeywordMap")
+        val evaluation = evaluator.evaluate(term.symbol, source, args, context, computer)
+        steps.addAll(evaluation.argEvaluations)
+        return FunctionInvocation(namespace, term, evaluation.result, context, context, steps.toList())
     }
 
     companion object {
@@ -110,10 +133,10 @@ class GroovyScriptInvoker(private val computer: Computer, private val evaluator:
         fun evaluate(
             symbol: Term.Value.Atom.Symbol,
             source: Term.Value.Atom.String,
-            args: Term.Value.Container.KeywordMap,
+            args: Term.Value.Container.Map,
             context: Context,
             computer: Computer
-        ): Term
+        ): ScriptEvaluationResult
     }
 }
 

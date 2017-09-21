@@ -9,7 +9,7 @@ object Camel {
     val producer = context.createProducerTemplate()!!
 }
 
-object CamelHttpClient : HttpResolver.Client {
+object CamelHttpClient : HttpInvoker.Client {
     override fun get(url: String): CompletableFuture<String> {
         val http4url = url.replaceFirst("://", "4://")
         return Camel.producer.asyncRequestBody(http4url, null, String::class.java)

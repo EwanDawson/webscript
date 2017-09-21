@@ -92,8 +92,6 @@ sealed class Term {
         fun keyword(prefix: String, name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(prefix, name))
         fun keyword(name: String) = Term.Value.Atom.Keyword(Keyword.newKeyword(name))
         fun list(value: List<Any?>) = Term.Value.Container.List(value.map { of(it) })
-        fun map(vararg pairs: Pair<Term.Value.Atom.Keyword, Term>) = Term.Value.Container.KeywordMap(mapOf(*pairs))
-        fun map(vararg pairs: Pair<Term, Term>) = Term.Value.Container.Map(mapOf(*pairs))
         fun map(value: Map<*, *>) = Term.Value.Container.Map(value.map { Pair(of(it.key), of(it.value)) }.toMap())
         fun set(value: Set<Any?>) = Term.Value.Container.Set(value.map { of(it) }.toSet())
         fun bool(value: Boolean) = Term.Value.Atom.Bool(value)

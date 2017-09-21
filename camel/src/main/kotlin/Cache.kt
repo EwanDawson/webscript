@@ -12,7 +12,7 @@ interface Cache {
     data class Key(val term: Term, val context: Context)
 }
 
-class HashMapCache : Cache {
+object HashMapCache : Cache {
 
     override val id = UUID.randomUUID()!!
 
@@ -27,4 +27,19 @@ class HashMapCache : Cache {
     override fun put(key: Cache.Key, operation: Operation<*,*>) {
         cache.put(key, CachedOperation(operation))
     }
+}
+
+object NoCache : Cache {
+    override val id = UUID.randomUUID()!!
+
+    override fun exists(key: Cache.Key) = false
+
+    override fun get(key: Cache.Key): CachedOperation {
+        TODO("not implemented")
+    }
+
+    override fun put(key: Cache.Key, operation: Operation<*, *>) {
+
+    }
+
 }

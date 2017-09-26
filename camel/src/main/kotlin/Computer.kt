@@ -1,3 +1,7 @@
+import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.channels.ReceiveChannel
+import kotlinx.coroutines.experimental.channels.produce
+import kotlinx.coroutines.experimental.runBlocking
 import org.slf4j.LoggerFactory
 import java.util.*
 import kotlin.streams.asSequence
@@ -13,15 +17,17 @@ class Computer(private val cache: Cache) {
 
     private val operators = listOf(CacheRetriever(cache), FunctionSymbolSubstituter) + listOf(
         HttpInvoker(CamelHttpClient, this),
-        GroovyScriptInvoker(this, GroovyEvaluator())
+        GroovyScriptInvoker(this, Groovy)
     )
 
-    fun evaluate(term: Term.FunctionApplication, context: Context): FunctionEvaluation {
+    suspend fun evaluate(term: Term.FunctionApplication, context: Context): FunctionEvaluation {
         var currentTerm: Term = term
         var currentContext = context
         val operations = mutableListOf<Operation<*,*>>()
         while (currentTerm !is Term.Value<*>) {
-            val operator = operators.find { it.matches(currentTerm, currentContext) } ?: throw UnresolvableTermException(currentTerm, currentContext)
+            val operator = operators
+                .find { it.matches(currentTerm, currentContext) }
+                ?: throw UnresolvableTermException(currentTerm, currentContext)
             val operation = operator.operate(currentTerm, currentContext)
             if (operation !is CachedOperation) cache.put(Cache.Key(currentTerm, currentContext), operation)
             log.info(operation.toString())
@@ -30,12 +36,16 @@ class Computer(private val cache: Cache) {
             currentContext = operation.outputContext
         }
         val result = FunctionEvaluation(term, currentTerm, context, currentContext, operations.toList())
-        if (evaluationNotRetievedFromCache(result)) cache.put(Cache.Key(term, context), result)
+        if (evaluationNotRetrievedFromCache(result)) cache.put(Cache.Key(term, context), result)
         return result
     }
 
-    private fun evaluationNotRetievedFromCache(operations: FunctionEvaluation) =
+    private fun evaluationNotRetrievedFromCache(operations: FunctionEvaluation) =
         (operations.subOps.size == 1 && operations.subOps[0].type == "CACHED").not()
+
+    fun shutdown() {
+        Groovy.shutdown()
+    }
 }
 
 data class Context(val substitutions: List<Substitution>)
@@ -105,7 +115,7 @@ data class CachedOperation(
 
 interface Operator<out From:Term, out To:Term> {
     fun matches(term: Term, context: Context): Boolean
-    fun operate(term: Term, context: Context): Operation<From, To>
+    suspend fun operate(term: Term, context: Context): Operation<From, To>
 }
 
 class CacheRetriever(private val cache: Cache) : Operator<Term, Term> {
@@ -113,7 +123,7 @@ class CacheRetriever(private val cache: Cache) : Operator<Term, Term> {
         return cache.exists(Cache.Key(term, context))
     }
 
-    override fun operate(term: Term, context: Context): CachedOperation {
+    override suspend fun operate(term: Term, context: Context): CachedOperation {
         return cache.get(Cache.Key(term, context))
     }
 }
@@ -125,7 +135,7 @@ object FunctionSymbolSubstituter : Operator<Term.FunctionApplication, Term> {
         }
     }
 
-    override fun operate(term: Term, context: Context): FunctionSubstitution {
+    override suspend fun operate(term: Term, context: Context): FunctionSubstitution {
         term as Term.FunctionApplication
         val substitution = context.substitutions.find { it.from == term.symbol }!!.to as Term.FunctionApplication
         val newFnApplication = Term.function(substitution.symbol, substitution.args + term.args)
@@ -138,7 +148,7 @@ object FunctionResolver : Operator<Term.FunctionApplication, Term.FunctionApplic
         return term is Term.FunctionApplication && FunctionSymbolSubstituter.matches(term.symbol, context)
     }
 
-    override fun operate(term: Term, context: Context): FunctionResolution {
+    override suspend fun operate(term: Term, context: Context): FunctionResolution {
         term as Term.FunctionApplication
         val steps = mutableListOf<FunctionSubstitution>()
         var symbol = term.symbol
@@ -157,7 +167,35 @@ interface FunctionInvoker : Operator<Term.FunctionApplication, Term>
 @Suppress("unused")
 class UnresolvableTermException(term: Term, context: Context) : RuntimeException("No resolver found for ${term.toEDN()}")
 
-fun main(args: Array<String>) {
+fun main(args: Array<String>) = runBlocking {
+    val computer = Computer(HashMapCache)
+    val elapsed = measureTimeMillis {
+        val inputs = produceInputs()
+        val evaluations = evaluate(inputs, computer)
+        for (i in 1..100) {
+            val evaluation = evaluations.receive()
+            println (evaluation.outputTerm.value)
+            println (evaluation.describe())
+        }
+        evaluations.cancel()
+        inputs.cancel()
+    }
+    println("Elapsed time: ${elapsed}ms = ${elapsed / 100.0}ms/eval")
+    computer.shutdown()
+}
+
+
+fun produceInputs() = produce(CommonPool) {
+    val inputs = listOf(
+//        "(async-test{:a 1 :b 2})",
+        "(add{:a 1 :b 2})",
+        "(two-plus-two)"
+    )
+    val seq = Random().ints(0, inputs.size).asSequence().iterator()
+    while(true) send(Term.parse(inputs[seq.next()]) as Term.FunctionApplication)
+}
+
+fun evaluate(inputs: ReceiveChannel<Term.FunctionApplication>, computer: Computer) = produce(CommonPool) {
     val context = Context(listOf(
         Substitution(Term.symbol("two-plus-two"),
             Term.function(GroovyScriptInvoker.groovyFn,
@@ -182,21 +220,5 @@ fun main(args: Array<String>) {
             )
         )
     ))
-    val computer = Computer(HashMapCache)
-    val rnd = Random().ints(0, 2)
-    val inputs = listOf(
-        "(async-test{:a 1 :b 2})",
-        "(add{:a 1 :b 2})",
-        "(two-plus-two)"
-    )
-    val elapsed = measureTimeMillis {
-        rnd.asSequence().take(100).map { inputs[it] }.forEach { input ->
-            val evaluation = computer.evaluate(Term.parse(input) as Term.FunctionApplication, context)
-            println(evaluation.outputTerm.value)
-            println(evaluation.describe())
-        }
-    }
-    println("Elapsed time: ${elapsed}ms = ${elapsed / 200.0}ms/eval")
-//    computer.printEvaluationTree(System.out)
-//    defaultExecutorService.shutdown()
+    for (input in inputs) send(computer.evaluate(input, context))
 }

@@ -10,7 +10,7 @@ class HttpInvoker(private val client: Client, private val computer: Computer) : 
         return term is Term.FunctionApplication && term.symbol == httpFn && term.args[0] != Term.Value.Atom.Nil
     }
 
-    override fun operate(term: Term, context: Context): FunctionInvocation {
+    override suspend fun operate(term: Term, context: Context): FunctionInvocation {
         term as Term.FunctionApplication
         val steps = mutableListOf<Operation<*,*>>()
         val urlTerm = term.args[0]

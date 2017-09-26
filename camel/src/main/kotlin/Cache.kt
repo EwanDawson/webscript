@@ -1,4 +1,5 @@
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * @author Ewan
@@ -16,7 +17,7 @@ object HashMapCache : Cache {
 
     override val id = UUID.randomUUID()!!
 
-    private val cache = mutableMapOf<Cache.Key, CachedOperation>()
+    private val cache = ConcurrentHashMap<Cache.Key, CachedOperation>()
 
     override fun exists(key: Cache.Key) = cache.containsKey(key)
 

@@ -31,6 +31,9 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre8:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-script-runtime:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-compiler:$kotlin_version"
+    compile "org.jetbrains.kotlin:kotlin-script-util:$kotlin_version"
     compile 'org.apache.camel:camel-core:2.19.2'
     compile 'org.apache.camel:camel-http4:2.19.2'
     compile 'org.apache.httpcomponents:httpclient:4.5.3'
@@ -54,4 +57,9 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
+}
+kotlin {
+    experimental {
+        coroutines "enable"
+    }
 }

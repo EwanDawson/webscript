@@ -1,0 +1,23 @@
+#+TITLE: WebScript
+
+* Status as of <2017-12-27 Wed>
+  We have the following modules:
+  - [[file:camel/src/main/kotlin/Computer.kt][Computer]] :: implements the ~Computer~, along with the various ~Operator~ and ~Operation~ concepts
+  - [[file:camel/src/main/kotlin/Cache.kt][Cache]] :: implements a simple in-memory ~Operation~ cache
+  - [[file:camel/src/main/kotlin/Camel.kt][Camel]] :: provides an HTTP client implementation
+  - [[file:camel/src/main/kotlin/Groovy.kt][Groovy]] :: implements a ~FunctionInvoker~ capable of executing a Groovy script
+  - [[file:camel/src/main/kotlin/Http.kt][Http]] :: implements a ~FuntionInvoker~ capable of retrieving a remote ~String~ ~Term~ via HTTP
+  - [[file:camel/src/main/kotlin/Term.kt][Term]] :: provides the ~Term~ class hierarchy - ~Value~ {~Atom~ {~String~, ~Int~, ~Decimal~, ~Char~, ~Bool~, ~Keyword~, ~Symbol~}, ~Container~ {~List~, ~Set~, ~Map~, ~KeywordMap~}}, and ~FunctionEvaluation~, along with the convenience functions for creating instances of these terms
+
+  The ~Computer~ operates in using non-blocking continuations, via the Kotlin co-routines library.
+
+* Next steps
+** TODO Implement HTTP API to allow Terms to be passed to a Computer for evaluation via an HTTP POST request
+** TODO Implement a "Merge Substitutions" operations, that causes a set of Substitutions to be merged into the current Context 
+** TODO Implement the concept of a "User Profile" including a set of terms to be evaluated as an initialization process
+   This would include one or more Terms that cause "Merge Substitution" operations to be executed, loading the context with a default set of substitutions for that user.
+   Initially, the user profile can be identified and activated by a simple user id (name), although this needs to be made more secure, so that, for example, the user signs their request with their private key, which is then verified by the computer. Alternatively, implement an OIDC workflow.
+   User Profile should also include a cron table, allowing the user to define a set of Terms to be evaluated at certain times
+** TODO Implement a web UI to allow for communication with the WebScript OS
+** TODO Add cache configuration to context
+   Allows an Operator to set the caching rules for that operations. The caching rules are narrowing, such that each time they are updated, the cache scope is narrowed. This would have to be used by the Cache to determine what can be cached and if a cached Operation is stale or not.

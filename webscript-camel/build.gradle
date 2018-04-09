@@ -1,6 +1,33 @@
+buildscript {
+    ext.kotlin_version = '1.2.31'
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
 plugins {
     id 'java'
+    id "org.jetbrains.kotlin.jvm" version "1.2.31"
     id 'application'
 }
 
-mainClassName = 'com.hyperadvanced.webscript.Webscript'
+mainClassName = 'MainKt'
+
+repositories {
+    mavenCentral()
+}
+
+ext.camel_version = "2.21.0"
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compile "org.apache.camel:camel-core:$camel_version"
+    compile "org.apache.camel:camel-cache:$camel_version"
+    compile 'us.bpsm:edn-java:0.5.0'
+    compile 'org.codehaus.groovy:groovy:2.4.15'
+}

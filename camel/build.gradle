@@ -2,9 +2,11 @@ version 'unspecified'
 
 buildscript {
     ext.kotlin_version = '1.2.10'
+    ext.ktor_version = '0.9.0'
 
     repositories {
         mavenCentral()
+        maven { url  "http://dl.bintray.com/kotlin/ktor" }
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
@@ -25,6 +27,8 @@ junitPlatform {
 
 repositories {
     mavenCentral()
+    maven { url "http://dl.bintray.com/kotlin/ktor" }
+    maven { url "https://dl.bintray.com/kotlin/kotlinx" }
     maven { url "https://oss.sonatype.org/content/repositories/releases" }
     maven { url "http://dl.bintray.com/jetbrains/spek" }
 }
@@ -40,6 +44,8 @@ dependencies {
     compile 'org.codehaus.groovy:groovy-all:2.3.11'
     compile 'org.slf4j:slf4j-simple:1.7.25'
     compile 'us.bpsm:edn-java:0.5.0'
+    compile "io.ktor:ktor-server-core:$ktor_version"
+    compile "io.ktor:ktor-server-netty:$ktor_version"
     testCompile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
     testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"

@@ -1,0 +1,33 @@
+* Base built-in functions
+  - (sys/get list n) :: get the nth item from list
+  - (sys/let [[a b][c d]...] term...) :: invoke terms sequentially, adding a = b and c = d to the binding used for the invocations
+
+* Webscript is now Kutoa
+  <2018-05-05 Sat>
+  The word "kutoa" means "weave" or "knit" in Finnish. It also means "to give" in some African languages. I've registered the domain name ~kutoa.io~.
+
+* Using Types / Specs for validation and discovery
+  <2018-05-05 Sat>
+  Each function receives a message (argument list) and produces a message (return value). We can't use language specific types outside of the language runtimes themselves, but we can define our own type system, or better, define a spec that a given message must meet (see Clojure's ~spec~ library, and Rick Hickey's "Speculation" talk). The spec for a message would be a simple data structure. A function could have metadata, which would itself be resolved via a symbol/identifier) that would define the spec for the argument list and return value. The specs themselves would be identifiable and sharable, and resolved via a symbol/identifier. Each message passed to/from a function would be subject to validation by checking for conformance to the spec.
+
+  This integrates nicely with the idea that we can call functions that may not yet exist. In out code, we call some function using a symbol that is local to our own namespace. If that function doesn't exist, we are asked if we want to write that function now, or search for a function that conforms to some spec. If we choose the latter option, we declare the spec that the function should meet, and the system will search a library of shared functions, looking for one whose spec meets the requirements. The user is then presented with a list of compatible functions. If they find one that is suitable, they can choose to either reference that function directly from their code, or create a binding from their local symbol to that function.
+* Security and namespaces
+  <2018-05-08 Tue>
+  A name space is associated with a key pair. Use some global registry for name space lookup. For example, dns. Store public key in dns record. If application term cannot be evaluated locally, encrypt local name, args and bindings, and send message to have term evaluated remotely. Only namespace owner will be able to read the message. Response is encrypted using senders public key. Thus, no plaintext is sent over wire. 
+  Assume non - namespaced bindings are public. Strip out any bindings with namespaces different from the receiver before sending.
+* Polyglot Kutoa 
+  <2018-05-09 Wed>
+  I can use [[http://www.graalvm.org/][GraalVM]] to execute scripts written on JavaScript, Ruby, R or Python in Kutoa.
+* TODO Evaluate Ballerina "Cloud Native Programming Language"
+  <2018-05-09 Wed>
+  See [[https://ballerina.io/]] and [[https://github.com/ballerina-platform/ballerina-lang]]
+* Persistence
+  <2018-05-09 Wed>
+  Many applictions running on Kutoa will need a persistence layer. There are a few options:
+  - [[rmail:https://couchdb.apache.org/][CouchDB]] :: HTTP-native, nice simple scaling story, document store, built-in UI
+  - [[https://www.datomic.com/][Datomic]] :: Nice immuatble model; perhaps not such a good fit - schemaless documents seem to have more general applicability for this problem domain
+* Browser based development environment
+  - Look into using browser-based test editor such as [[https://codemirror.net/][Codemirror]].
+* Durability
+  - Consider [[https://bookkeeper.apache.org/][Apache BookKeeper]] for storing computation steps in a distributed log
+  - Storing to local filesystem journal may be enough though, if we consider compute nodes to share nothing unless explicitly passing messages.

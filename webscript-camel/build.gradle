@@ -27,7 +27,10 @@ ext.camel_version = "2.21.0"
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     compile "org.apache.camel:camel-core:$camel_version"
-    compile "org.apache.camel:camel-cache:$camel_version"
+    compile "org.apache.camel:camel-http:$camel_version"
+    compile "org.apache.camel:camel-ehcache:$camel_version"
     compile 'us.bpsm:edn-java:0.5.0'
     compile 'org.codehaus.groovy:groovy:2.4.15'
+    runtime 'org.slf4j:slf4j-simple:1.7.25'
+    testCompile 'io.kotlintest:kotlintest-runner-junit5:3.0.4'
 }

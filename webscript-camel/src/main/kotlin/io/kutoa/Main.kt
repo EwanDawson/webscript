@@ -1,3 +1,5 @@
+package io.kutoa
+
 import groovy.lang.Binding
 import groovy.lang.Closure
 import groovy.lang.GroovyShell
@@ -10,8 +12,6 @@ import us.bpsm.edn.printer.Printers
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.util.*
-import kotlin.collections.List
-import kotlin.collections.RandomAccess
 
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 sealed class Term {
@@ -81,7 +81,7 @@ sealed class Term {
         abstract val size : Int
         abstract fun map(mapping: (Term) -> Term) : Compound<T>
     }
-    data class Application(val symbol: TSymbol, val args: List<Term> = emptyList()): Term() {
+    data class Application(val symbol: TSymbol, val args: kotlin.collections.List<Term> = emptyList()): Term() {
         override val isConstant get() = false
         override fun unwrap() = LinkedList<Any?>(listOf(symbol.unwrap()) + args.map { it.unwrap() })
     }
@@ -112,14 +112,14 @@ sealed class Term {
                 is Symbol -> TSymbol(value)
                 is Keyword -> TKeyword(value)
                 is RandomAccess -> throw SyntaxError("Not a valid expression: '$value'")
-                is List<*> -> list(value as List<Any?>)
+                is kotlin.collections.List<*> -> list(value as kotlin.collections.List<Any?>)
                 is Set<*> -> set(value)
                 is Map<*, *> -> map(value)
                 else -> throw SyntaxError("Cannot create Term from ${value::class} '$value'")
             }
         }
 
-        fun list(value: List<Any?>) = TList(value.map { of(it) })
+        fun list(value: kotlin.collections.List<Any?>) = TList(value.map { of(it) })
         fun map(value: Map<*, *>) = TMap(value.map { Pair(of(it.key) as? TConstant<*> ?: throw SyntaxError("Map key must be a Constant"), of(it.value)) }.toMap())
         fun set(value: Set<Any?>) = TSet(value.map { of(it) }.toSet())
     }
@@ -149,7 +149,7 @@ typealias TApplication = Term.Application
 
 typealias Bindings = Map<TSymbol, Term>
 
-class Computer(builtIns: List<Function>, private val cache: Cache) {
+class Computer(builtIns: kotlin.collections.List<Function>, private val cache: Cache) {
 
     private val macroIdentifier = TSymbol("sys.macro", "identifier")
     private val macroArgs = TSymbol("sys.macro", "args")
@@ -224,7 +224,7 @@ class Computer(builtIns: List<Function>, private val cache: Cache) {
             }
         }
 
-    private fun createMacroBindings(identifier: TSymbol, args: List<Term>, bindings: Bindings) : Bindings =
+    private fun createMacroBindings(identifier: TSymbol, args: kotlin.collections.List<Term>, bindings: Bindings) : Bindings =
         bindings + mapOf(macroIdentifier to identifier, macroArgs to Term.list(args))
 
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
@@ -258,7 +258,7 @@ class Cache {
 }
 
 data class Evaluation(val input: Term, val bindings: Bindings, val result: Term, val operation: Operation,
-                      val subSteps: List<Evaluation>, val dependencies: Bindings) {
+                      val subSteps: kotlin.collections.List<Evaluation>, val dependencies: Bindings) {
 
     companion object {
         fun constant(input: Term, bindings: Bindings) : Evaluation {
@@ -275,7 +275,7 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
         }
 
         fun compound(term: TCompound<*>, bindings: Bindings, result: Term,
-                     subSteps: List<Evaluation>): Evaluation {
+                     subSteps: kotlin.collections.List<Evaluation>): Evaluation {
             return Evaluation(term, bindings, result, Operation.COMPOUND, subSteps, emptyMap())
         }
 
@@ -352,15 +352,15 @@ class GroovyScriptFunction : Function(TSymbol("sys.scripting.groovy", "eval")) {
         return Evaluation.applyFunction(term, bindings, result)
     }
 
-    private fun checkSyntax(args: List<Term>) {
+    private fun checkSyntax(args: kotlin.collections.List<Term>) {
         if (args.size != 2) throw SyntaxError("$identifier must have two arguments")
     }
 
-    private fun extractSource(args: List<Term>): TString {
+    private fun extractSource(args: kotlin.collections.List<Term>): TString {
         return args[0] as? TString ?: throw SyntaxError("First argument to $identifier must be of type String")
     }
 
-    private fun extractScriptArgs(args: List<Term>): TKeywordMap {
+    private fun extractScriptArgs(args: kotlin.collections.List<Term>): TKeywordMap {
         return args[1] as? TKeywordMap ?: throw SyntaxError("Second argument to $identifier must be of type KeywordMap")
     }
 

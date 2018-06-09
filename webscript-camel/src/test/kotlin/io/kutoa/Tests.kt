@@ -1,8 +1,10 @@
-import Evaluation.Operation.*
+package io.kutoa
+
 import io.kotlintest.properties.Gen
 import io.kotlintest.properties.forAll
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
+import io.kutoa.Evaluation.Operation.*
 import org.apache.camel.impl.DefaultCamelContext
 import java.math.BigDecimal
 import java.math.BigInteger

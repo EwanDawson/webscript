@@ -92,12 +92,6 @@ class Tests : StringSpec() {
             }
         }
 
-        "Keyword Map with Constant values should evaluate to itself" {
-            forAll(100, TKeywordMaps(TConstants)) {
-                it whenEvaluated isConstantEvaluation
-            }
-        }
-
         "Map with Constant keys and values should evaluate to itself" {
             forAll(100, TMaps(TConstants, TConstants)) {
                 it whenEvaluated isConstantEvaluation
@@ -113,14 +107,7 @@ class Tests : StringSpec() {
                 operation = BIND_SYMBOL,
                 bindings = bindings,
                 dependencies = bindings,
-                subSteps = listOf(Evaluation(
-                    input = value,
-                    operation = CONSTANT,
-                    bindings = bindings,
-                    dependencies = emptyMap(),
-                    subSteps = emptyList(),
-                    result = value
-                )),
+                subSteps = listOf(Evaluation.constant(value, bindings)),
                 result = value
             )
         }
@@ -166,14 +153,7 @@ class Tests : StringSpec() {
                 operation = APPLY_FUNCTION,
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = args.map { integer -> Evaluation(
-                    input = integer,
-                    operation = CONSTANT,
-                    bindings = emptyMap(),
-                    dependencies = emptyMap(),
-                    subSteps = emptyList(),
-                    result = integer
-                ) },
+                subSteps = args.map(Evaluation.Companion::constant),
                 result = TList(args)
             )
         }
@@ -207,6 +187,41 @@ class Tests : StringSpec() {
                 result = TList(args)
             )
         }
+
+        "Basic Groovy script can be evaluated" {
+            val term = GroovyScriptFunction.application(
+                "a + b",
+                "a" to 1, "b" to 2
+            )
+            term shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = emptyMap(),
+                dependencies = emptyMap(),
+                result = 3.toTerm(),
+                subSteps = term.args.map(Evaluation.Companion::constant)
+            )
+        }
+
+        "Groovy script with namespaced variables can be evaluated" {
+            val term = GroovyScriptFunction.application(
+                "binding['local/a'] + binding['local/b']",
+                "local/a" to 1, "local/b" to 2
+            )
+            term shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = emptyMap(),
+                dependencies = emptyMap(),
+                result = 3.toTerm(),
+                subSteps = term.args.map(Evaluation.Companion::constant)
+            )
+        }
+
+//        "Groovy script with syntax error cannot be evaluated" {
+//            val script = TString("binding['local/a'] + binding['local/b']")
+//            val term = TApplication()
+//        }
     }
 }
 
@@ -221,7 +236,6 @@ val TSymbols = TSymbolGen()
 val TSets = fun(termGen: Gen<Term>) = TSetGen(termGen)
 val TLists = fun(termGen: Gen<Term>) = TListGen(termGen)
 val TMaps = fun(keyGen: Gen<TConstant<*>>, valGen: Gen<Term>) = TMapGen(keyGen, valGen)
-val TKeywordMaps = fun(valGen: Gen<Term>) = TKeywordMapGen(valGen)
 
 class TIntegerGen : Gen<TInteger> {
     override fun always(): Iterable<TInteger> = listOf<Number>(
@@ -346,17 +360,6 @@ class TMapGen<out K: TConstant<*>, out V: Term>(private val keyGen: Gen<K>, priv
 
     override fun random(): Sequence<TMap>
         = Gen.map(keyGen, valGen).random().map { TMap(it.mapKeys { it.key }) }
-
-}
-
-class TKeywordMapGen<out V: Term>(private val valGen: Gen<V>) : Gen<TKeywordMap> {
-    @Suppress("UNCHECKED_CAST")
-    override fun always(): Iterable<TKeywordMap>
-        = Gen.map(TKeywords, valGen).always().map { TKeywordMap(it) }
-
-    @Suppress("UNCHECKED_CAST")
-    override fun random(): Sequence<TKeywordMap>
-        = Gen.map(TKeywords, valGen).random().map { TKeywordMap(it) }
 
 }
 

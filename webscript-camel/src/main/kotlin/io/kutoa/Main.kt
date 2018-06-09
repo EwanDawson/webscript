@@ -3,6 +3,8 @@ package io.kutoa
 import groovy.lang.Binding
 import groovy.lang.Closure
 import groovy.lang.GroovyShell
+import io.kutoa.Term.Companion.kmap
+import io.kutoa.Term.Companion.of
 import org.apache.camel.FluentProducerTemplate
 import org.apache.camel.impl.DefaultCamelContext
 import us.bpsm.edn.Keyword
@@ -29,6 +31,7 @@ sealed class Term {
             data class Boolean(override val value: kotlin.Boolean): Constant<kotlin.Boolean>(value)
             data class Keyword(override val value: us.bpsm.edn.Keyword): Constant<us.bpsm.edn.Keyword>(value) {
                 constructor(prefix: kotlin.String, name: kotlin.String) : this (us.bpsm.edn.Keyword.newKeyword(prefix, name))
+                constructor(name: kotlin.String) : this (us.bpsm.edn.Keyword.newKeyword(name))
             }
             // TODO("Add Lambda atom - should be constant, allowing from closure over variables from currently scoped binding")
             override val isConstant = true
@@ -53,30 +56,21 @@ sealed class Term {
     sealed class Compound<out T:Any>(open val value: T) : Term() {
         data class List(override val value: kotlin.collections.List<Term>): Compound<kotlin.collections.List<Term>>(value) {
             override val size = value.size
-            override fun map(mapping: (Term) -> Term): List = Term.list(value.map(mapping))
+            override fun map(mapping: (Term) -> Term): List = value.map(mapping).toTerm()
             override val isConstant get() = value.all(Term::isConstant)
             override fun unwrap() = value.map(Term::unwrap)
         }
         data class Set(override val value: kotlin.collections.Set<Term>): Compound<kotlin.collections.Set<Term>>(value) {
             override val size = value.size
-            override fun map(mapping: (Term) -> Term): Set = Term.set(value.map(mapping).toSet())
+            override fun map(mapping: (Term) -> Term): Set = value.map(mapping).toSet().toTerm()
             override val isConstant get() = value.all(Term::isConstant)
             override fun unwrap() = value.map(Term::unwrap).toSet()
         }
-        data class Map(override val value: kotlin.collections.Map<TConstant<*>,Term>): Compound<kotlin.collections.Map<TConstant<*>,Term>>(value) {
+        data class Map(override val value: kotlin.collections.Map<out TConstant<*>,Term>): Compound<kotlin.collections.Map<out TConstant<*>,Term>>(value) {
             override val size = value.size
-            override fun map(mapping: (Term) -> Term): Map = Term.map(value.mapValues { e -> mapping(e.value) })
+            override fun map(mapping: (Term) -> Term): Map = value.mapValues { e -> mapping(e.value) }.toTerm()
             override val isConstant get() = value.values.all(Term::isConstant)
             override fun unwrap() = value.map { Pair(it.key.unwrap(), it.value.unwrap()) }.toMap()
-        }
-        data class KeywordMap(override val value: kotlin.collections.Map<TKeyword, Term>): Compound<kotlin.collections.Map<TKeyword, Term>>(value) {
-            override val size = value.size
-            override fun map(mapping: (Term) -> Term): KeywordMap = TKeywordMap(value.mapValues { e -> mapping(e.value) })
-            override val isConstant get() = value.values.all(Term::isConstant)
-            override fun unwrap() = value.map { Pair(it.key.unwrap(), it.value.unwrap()) }.toMap()
-            companion object {
-                val EMPTY = KeywordMap(mapOf())
-            }
         }
         abstract val size : Int
         abstract fun map(mapping: (Term) -> Term) : Compound<T>
@@ -112,16 +106,14 @@ sealed class Term {
                 is Symbol -> TSymbol(value)
                 is Keyword -> TKeyword(value)
                 is RandomAccess -> throw SyntaxError("Not a valid expression: '$value'")
-                is kotlin.collections.List<*> -> list(value as kotlin.collections.List<Any?>)
-                is Set<*> -> set(value)
-                is Map<*, *> -> map(value)
+                is kotlin.collections.List<*> -> (value as kotlin.collections.List<Any?>).toTerm()
+                is Set<*> -> value.toTerm()
+                is Map<*, *> -> value.toTerm()
                 else -> throw SyntaxError("Cannot create Term from ${value::class} '$value'")
             }
         }
 
-        fun list(value: kotlin.collections.List<Any?>) = TList(value.map { of(it) })
-        fun map(value: Map<*, *>) = TMap(value.map { Pair(of(it.key) as? TConstant<*> ?: throw SyntaxError("Map key must be a Constant"), of(it.value)) }.toMap())
-        fun set(value: Set<Any?>) = TSet(value.map { of(it) }.toSet())
+        fun kmap(value: Map<String, Any?>) = TMap(value.mapKeys { TKeyword(it.key) }.mapValues { Term.of(it.value) })
     }
 }
 
@@ -141,11 +133,15 @@ typealias TConstant<T> = Term.Atom.Constant<T>
 typealias TSymbol = Term.Atom.Symbol
 typealias TAtom<T> = Term.Atom<T>
 typealias TCompound<T> = Term.Compound<T>
-typealias TKeywordMap = Term.Compound.KeywordMap
 typealias TList = Term.Compound.List
 typealias TMap = Term.Compound.Map
 typealias TSet = Term.Compound.Set
 typealias TApplication = Term.Application
+
+fun Int.toTerm() = TInteger(this)
+fun kotlin.collections.List<Any?>.toTerm() = TList(this.map { of(it) })
+fun kotlin.collections.Map<*,*>.toTerm() = TMap(this.map { Pair(of(it.key) as? TConstant<*> ?: throw SyntaxError("Map key must be a Constant"), of(it.value)) }.toMap())
+fun Set<Any?>.toTerm() = TSet(this.map { of(it) }.toSet())
 
 typealias Bindings = Map<TSymbol, Term>
 
@@ -176,13 +172,13 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             when (term) {
                 is TList -> {
                     term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                    Evaluation.compound(term, bindings, Term.list(subSteps.map(Evaluation::result)), subSteps)
+                    Evaluation.compound(term, bindings, TList(subSteps.map(Evaluation::result)), subSteps)
                 }
                 is TSet -> {
                     term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                    Evaluation.compound(term, bindings, Term.set(subSteps.map(Evaluation::result).toSet()), subSteps)
+                    Evaluation.compound(term, bindings, TSet(subSteps.map(Evaluation::result).toSet()), subSteps)
                 }
-                is TMap, is TKeywordMap -> {
+                is TMap -> {
                     val result = term.map {
                         val evaluation = evaluate(it, bindings)
                         subSteps.add(evaluation)
@@ -225,7 +221,7 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
         }
 
     private fun createMacroBindings(identifier: TSymbol, args: kotlin.collections.List<Term>, bindings: Bindings) : Bindings =
-        bindings + mapOf(macroIdentifier to identifier, macroArgs to Term.list(args))
+        bindings + mapOf(macroIdentifier to identifier, macroArgs to TList(args))
 
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
         val substeps = term.args.map { evaluate(it, bindings) }
@@ -265,6 +261,7 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
             assert(input.isConstant)
             return Evaluation(input, bindings, input, Operation.CONSTANT, emptyList(), emptyMap())
         }
+        fun constant(input: Term) = constant(input, emptyMap())
 
         fun bindSymbol(input: TSymbol, bindings: Bindings, result: Term, substep: Evaluation) : Evaluation {
             return Evaluation(input, bindings, result, Operation.BIND_SYMBOL, listOf(substep), mapOf(input to bindings[input]!!))
@@ -341,7 +338,7 @@ class HttpGetFunction(private val template: FluentProducerTemplate) : Function(T
     }
 }
 
-class GroovyScriptFunction : Function(TSymbol("sys.scripting.groovy", "eval")) {
+class GroovyScriptFunction : Function(symbol) {
     override fun apply(term: TApplication, bindings: Bindings, computer: Computer): Evaluation {
         checkSyntax(term.args)
         val source = extractSource(term.args)
@@ -360,20 +357,27 @@ class GroovyScriptFunction : Function(TSymbol("sys.scripting.groovy", "eval")) {
         return args[0] as? TString ?: throw SyntaxError("First argument to $identifier must be of type String")
     }
 
-    private fun extractScriptArgs(args: kotlin.collections.List<Term>): TKeywordMap {
-        return args[1] as? TKeywordMap ?: throw SyntaxError("Second argument to $identifier must be of type KeywordMap")
+    private fun extractScriptArgs(args: kotlin.collections.List<Term>): TMap {
+        return args[1] as? TMap ?: throw SyntaxError("Second argument to '${identifier.value}' must be of type Map")
     }
 
-    private fun createBinding(args: TKeywordMap, parentStep: Computer, bindings: Bindings): Binding {
+    private fun createBinding(args: TMap, parentStep: Computer, bindings: Bindings): Binding {
         val binding = Binding()
-        args.value.forEach { keyword, term -> binding.setVariable(keyword.value.toString(), term.unwrap()) }
+        args.value.forEach { key, term ->
+            val keyword = key as? TKeyword ?: TKeyword(key.value.toString())
+            val variableName = keyword.value.toVariableName()
+            val value = term.unwrap()
+            binding.setVariable(variableName, value)
+        }
         binding.setVariable("invoke", TermEvaluatingClosure(parentStep, bindings))
         return binding
     }
 
     companion object {
-
-        class TermEvaluatingClosure(private var computer: Computer, private val bindings: Bindings)
+        val symbol = TSymbol("sys.scripting.groovy", "eval")
+        fun application(script: String, vararg args : Pair<String, Any?>)
+            = TApplication(symbol, listOf(TString(script), kmap(args.toMap())))
+        private class TermEvaluatingClosure(private var computer: Computer, private val bindings: Bindings)
             : Closure<Evaluation>(null) {
             @Suppress("unused")
             fun doCall(identifier: String, vararg args: Any?) : Any {
@@ -385,6 +389,7 @@ class GroovyScriptFunction : Function(TSymbol("sys.scripting.groovy", "eval")) {
 
             private fun functionArgs(args: Array<out Any?>) = args.map { Term.of(it) }
         }
+        private fun Keyword.toVariableName() : String = this.toString().replaceFirst(":", "")
     }
 }
 

@@ -187,7 +187,7 @@ class Tests : StringSpec() {
         }
 
         "Groovy script with name-spaced variables can be evaluated" {
-            val script = "\"binding['local/a'] + binding['local/b']\""
+            val script = "\"arg.'local/a' + arg.'local/b'\""
             val term = "(sys.scripting.groovy/eval $script {:local/a 1, :local/b 2})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,

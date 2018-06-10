@@ -395,12 +395,15 @@ class GroovyScriptFunction : Function(symbol) {
     private fun createBinding(args: TMap, computer: Computer, bindings: Bindings,
                               subInvocations: MutableList<Evaluation>): Binding {
         val binding = Binding()
+        val argMap = mutableMapOf<String, Any>()
         args.value.forEach { key, term ->
             val keyword = key as? TKeyword ?: TKeyword(key.value.toString())
             val variableName = keyword.value.toVariableName()
             val value = term.unwrap()
+            argMap[variableName] = value
             binding.setVariable(variableName, value)
         }
+        binding.setVariable("arg", argMap.toMap())
         binding.setVariable("__computer", computer)
         binding.setVariable("__bindings", bindings)
         binding.setVariable("__substeps", subInvocations)

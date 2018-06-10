@@ -20,18 +20,27 @@ sealed class Term {
     sealed class Atom<out T:Any>(open val value: T) : Term() {
         sealed class Constant<out T:Any>(override val value: T) : Atom<T>(value) {
             object Nil : Constant<Nil>(Nil)
-            data class String(override val value: kotlin.String): Constant<kotlin.String>(value)
+            data class String(override val value: kotlin.String): Constant<kotlin.String>(value) {
+                override fun toString() = toEDNPretty()
+            }
             data class Integer(override val value: BigInteger): Constant<BigInteger>(value) {
                 constructor(value: Number) : this(value as? BigInteger ?: BigInteger.valueOf(value.toLong()))
+                override fun toString() = toEDNPretty()
             }
             data class Decimal(override val value: BigDecimal): Constant<BigDecimal>(value) {
                 constructor(value: Number) : this(value as? BigDecimal ?: BigDecimal.valueOf(value.toDouble()))
+                override fun toString() = toEDNPretty()
             }
-            data class Character(override val value: kotlin.Char): Constant<kotlin.Char>(value)
-            data class Boolean(override val value: kotlin.Boolean): Constant<kotlin.Boolean>(value)
+            data class Character(override val value: kotlin.Char): Constant<kotlin.Char>(value) {
+                override fun toString() = toEDNPretty()
+            }
+            data class Boolean(override val value: kotlin.Boolean): Constant<kotlin.Boolean>(value) {
+                override fun toString() = toEDNPretty()
+            }
             data class Keyword(override val value: us.bpsm.edn.Keyword): Constant<us.bpsm.edn.Keyword>(value) {
                 constructor(prefix: kotlin.String, name: kotlin.String) : this (us.bpsm.edn.Keyword.newKeyword(prefix, name))
                 constructor(name: kotlin.String) : this (us.bpsm.edn.Keyword.newKeyword(name))
+                override fun toString() = toEDNPretty()
             }
             // TODO("Add Lambda atom - should be constant, allowing from closure over variables from currently scoped binding")
             override val isConstant = true
@@ -40,6 +49,7 @@ sealed class Term {
             constructor(throwable: Throwable) : this(ErrorInfo(throwable))
             constructor(name: String, message: String) : this(ErrorInfo(name, message))
             override val isConstant = true
+            override fun toString() = toEDNPretty()
         }
         data class Symbol(override val value: us.bpsm.edn.Symbol): Atom<us.bpsm.edn.Symbol>(value) {
             constructor(prefix: String, name: String) : this(us.bpsm.edn.Symbol.newSymbol(prefix, name))
@@ -50,8 +60,13 @@ sealed class Term {
                     us.bpsm.edn.Symbol.newSymbol(fqn)
             )
             override val isConstant = false
+            override fun toString() = toEDNPretty()
         }
-        override fun unwrap() = value
+
+        // TODO: Create proper EDN representation for errors
+        @Suppress("IMPLICIT_CAST_TO_ANY")
+        override fun unwrap() =
+            if (this is Error) value.toString() else value
     }
     sealed class Compound<out T:Any>(open val value: T) : Term() {
         data class List(override val value: kotlin.collections.List<Term>): Compound<kotlin.collections.List<Term>>(value) {
@@ -59,18 +74,21 @@ sealed class Term {
             override fun map(mapping: (Term) -> Term): List = value.map(mapping).toTerm()
             override val isConstant get() = value.all(Term::isConstant)
             override fun unwrap() = value.map(Term::unwrap)
+            override fun toString() = toEDNPretty()
         }
         data class Set(override val value: kotlin.collections.Set<Term>): Compound<kotlin.collections.Set<Term>>(value) {
             override val size = value.size
             override fun map(mapping: (Term) -> Term): Set = value.map(mapping).toSet().toTerm()
             override val isConstant get() = value.all(Term::isConstant)
             override fun unwrap() = value.map(Term::unwrap).toSet()
+            override fun toString() = toEDNPretty()
         }
         data class Map(override val value: kotlin.collections.Map<out TConstant<*>,Term>): Compound<kotlin.collections.Map<out TConstant<*>,Term>>(value) {
             override val size = value.size
             override fun map(mapping: (Term) -> Term): Map = value.mapValues { e -> mapping(e.value) }.toTerm()
             override val isConstant get() = value.values.all(Term::isConstant)
             override fun unwrap() = value.map { Pair(it.key.unwrap(), it.value.unwrap()) }.toMap()
+            override fun toString() = toEDNPretty()
         }
         abstract val size : Int
         abstract fun map(mapping: (Term) -> Term) : Compound<T>
@@ -78,9 +96,15 @@ sealed class Term {
     data class Application(val symbol: TSymbol, val args: kotlin.collections.List<Term> = emptyList()): Term() {
         override val isConstant get() = false
         override fun unwrap() = LinkedList<Any?>(listOf(symbol.unwrap()) + args.map { it.unwrap() })
+        override fun toString() = toEDNPretty()
     }
 
     internal abstract fun unwrap(): Any
+
+    // TODO: Custom EDN pretty printing. For now, default is better than the pretty printer provided
+    protected fun toEDNPretty() = toEDN()
+
+    override fun toString() = toEDNPretty()
 
     fun toEDN() = Printers.printString(Printers.defaultPrinterProtocol(), unwrap())!!
     abstract val isConstant: Boolean
@@ -138,10 +162,12 @@ typealias TMap = Term.Compound.Map
 typealias TSet = Term.Compound.Set
 typealias TApplication = Term.Application
 
+fun String.toTerm() = TString(this)
 fun Int.toTerm() = TInteger(this)
 fun kotlin.collections.List<Any?>.toTerm() = TList(this.map { of(it) })
 fun kotlin.collections.Map<*,*>.toTerm() = TMap(this.map { Pair(of(it.key) as? TConstant<*> ?: throw SyntaxError("Map key must be a Constant"), of(it.value)) }.toMap())
 fun Set<Any?>.toTerm() = TSet(this.map { of(it) }.toSet())
+fun Throwable.toTerm() = TError(this)
 
 typealias Bindings = Map<TSymbol, Term>
 
@@ -168,42 +194,34 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
 
     private fun evaluateCompound(term: TCompound<*>, bindings: Bindings) : Evaluation {
         val subSteps = mutableListOf<Evaluation>()
-        return try {
-            when (term) {
-                is TList -> {
-                    term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                    Evaluation.compound(term, bindings, TList(subSteps.map(Evaluation::result)), subSteps)
-                }
-                is TSet -> {
-                    term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                    Evaluation.compound(term, bindings, TSet(subSteps.map(Evaluation::result).toSet()), subSteps)
-                }
-                is TMap -> {
-                    val result = term.map {
-                        val evaluation = evaluate(it, bindings)
-                        subSteps.add(evaluation)
-                        evaluation.result
-                    }
-                    Evaluation.compound(term, bindings, result, subSteps)
-                }
+        return when (term) {
+            is TList -> {
+                term.value.forEach { subSteps.add(evaluate(it, bindings)) }
+                Evaluation.compound(term, bindings, TList(subSteps.map(Evaluation::result)), subSteps)
             }
-        } catch (error: EvaluationError) {
-            throw EvaluationError(Evaluation.compound(term, bindings, error.evaluation.result, subSteps.plusElement(error.evaluation).toList()), error)
+            is TSet -> {
+                term.value.forEach { subSteps.add(evaluate(it, bindings)) }
+                Evaluation.compound(term, bindings, TSet(subSteps.map(Evaluation::result).toSet()), subSteps)
+            }
+            is TMap -> {
+                val result = term.map {
+                    val evaluation = evaluate(it, bindings)
+                    subSteps.add(evaluation)
+                    evaluation.result
+                }
+                Evaluation.compound(term, bindings, result, subSteps)
+            }
         }
     }
 
     private fun evaluateSymbol(term: TSymbol, bindings: Bindings) : Evaluation =
         if (bindings.containsKey(term)) {
-            val substep = try {
-                evaluate(bindings[term]!!, bindings)
-            } catch (error: EvaluationError) {
-                error.evaluation
-            }
+            val substep = evaluate(bindings[term]!!, bindings)
             Evaluation.bindSymbol(term, bindings, substep.result, substep)
         }
         else {
             val error = UnknownSymbolException(term)
-            throw EvaluationError(Evaluation.bindSymbol(term, bindings, error), error)
+            Evaluation.bindSymbol(term, bindings, error)
         }
 
     private fun evaluateApplication(term: TApplication, bindings: Bindings) : Evaluation =
@@ -215,7 +233,7 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
                     evaluateBuiltIn(term, builtInsMap[term.symbol]!!, bindings)
                 else -> {
                     val error = UnknownSymbolException(term.symbol)
-                    throw EvaluationError(Evaluation.bindSymbol(term.symbol, bindings, error), error)
+                    Evaluation.bindSymbol(term.symbol, bindings, error)
                 }
             }
         }
@@ -225,12 +243,15 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
 
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
         val substeps = term.args.map { evaluate(it, bindings) }
-        val evaluation = function.apply(TApplication(term.symbol, substeps.map { it.result }), bindings, this)
+        val evaluation : Evaluation
+        evaluation = try {
+            function.apply(TApplication(term.symbol, substeps.map { it.result }), bindings, this)
+        } catch (e: Exception) {
+            Evaluation.applyFunction(term, bindings, e.toTerm())
+        }
         return evaluation.copy(subSteps = substeps + evaluation.subSteps)
     }
 }
-
-class EvaluationError(val evaluation: Evaluation, error: Throwable) : RuntimeException(error)
 
 class Cache {
 
@@ -345,8 +366,8 @@ class GroovyScriptFunction : Function(symbol) {
         val scriptArgs = extractScriptArgs(term.args)
         val binding = createBinding(scriptArgs, computer, bindings)
         val shell = GroovyShell(binding)
-        val result = Term.of(shell.evaluate(source.value, identifier.toString()))
-        return Evaluation.applyFunction(term, bindings, result)
+        val result = shell.evaluate(source.value, identifier.toString())
+        return Evaluation.applyFunction(term, bindings, Term.of(result))
     }
 
     private fun checkSyntax(args: kotlin.collections.List<Term>) {

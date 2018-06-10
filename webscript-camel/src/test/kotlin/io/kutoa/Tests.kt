@@ -25,35 +25,19 @@ class Tests : StringSpec() {
 
         infix fun Term.whenEvaluated (check: Evaluation.(Input) -> Boolean) = this.let { term ->
             val input = Input(term, kotlin.collections.emptyMap())
-            try {
-                computer.evaluate(term, kotlin.collections.emptyMap()).run { check(input) }
-            } catch (error: EvaluationError) {
-                error.evaluation.run { check(input) }
-            }
+            computer.evaluate(term, kotlin.collections.emptyMap()).run { check(input) }
         }
         infix fun Input.whenEvaluated (check: Evaluation.(Input) -> Boolean) = this.let { input ->
-            try {
-                computer.evaluate(input.term, input.bindings).run { check(input) }
-            } catch (error: EvaluationError) {
-                error.evaluation.run { check(input) }
-            }
+            computer.evaluate(input.term, input.bindings).run { check(input) }
         }
 
         infix fun Term.shouldEvaluateTo (result: Evaluation) = this.let { term ->
             val input = Input(term, kotlin.collections.emptyMap())
-            try {
-                computer.evaluate(input.term, input.bindings) shouldBe result
-            } catch (error: EvaluationError) {
-                error.evaluation shouldBe result
-            }
+            computer.evaluate(input.term, input.bindings) shouldBe result
         }
 
         infix fun Input.shouldEvaluateTo (result: Evaluation) = this.let { input ->
-            try {
-                computer.evaluate(input.term, input.bindings) shouldBe result
-            } catch (error: EvaluationError) {
-                error.evaluation shouldBe result
-            }
+            computer.evaluate(input.term, input.bindings) shouldBe result
         }
 
         infix fun Term.withBindings (bindings: Bindings) : Input = Input(this, bindings)
@@ -73,6 +57,8 @@ class Tests : StringSpec() {
 //            result == input && operation == COMPOUND && subSteps.size == (input as TCompound<*>).size
 //                //&& subSteps.all { isConstantEvaluation(it.input)(it) }
 //        }}
+
+        val nl = System.lineSeparator()!!
 
         "Constant should evaluate to itself" {
             forAll(TConstants) {
@@ -218,10 +204,22 @@ class Tests : StringSpec() {
             )
         }
 
-//        "Groovy script with syntax error cannot be evaluated" {
-//            val script = TString("binding['local/a'] + binding['local/b']")
-//            val term = TApplication()
-//        }
+        "Groovy script with compilation error cannot be evaluated" {
+            val term = GroovyScriptFunction.application("}{")
+            term shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = emptyMap(),
+                dependencies = emptyMap(),
+                result = TError("org.codehaus.groovy.control.MultipleCompilationErrorsException", "startup failed:\r\n" +
+                    "sys.scripting.groovy/eval: 1: unexpected token: } @ line 1, column 1.$nl" +
+                    "   }{$nl" +
+                    "   ^$nl" +
+                    nl +
+                    "1 error$nl"),
+                subSteps = term.args.map(Evaluation.Companion::constant)
+            )
+        }
     }
 }
 

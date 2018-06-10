@@ -128,7 +128,12 @@ sealed class Term {
                 is Symbol -> TSymbol(value)
                 is Keyword -> TKeyword(value)
                 is RandomAccess -> throw SyntaxError("Not a valid expression: '$value'")
-                is kotlin.collections.List<*> -> (value as kotlin.collections.List<Any?>).toTerm()
+                is kotlin.collections.List<*> -> {
+                    val list = value as List<Any?>
+                    val firstTerm = list.firstOrNull()?.toTerm()
+                    if (firstTerm != null && firstTerm is TSymbol) TApplication(firstTerm, list.drop(1).map(Term.Companion::of))
+                    else list.toTerm()
+                }
                 is Set<*> -> value.toTerm()
                 is Map<*, *> -> value.toTerm()
                 else -> throw SyntaxError("Cannot create Term from ${value::class} '$value'")
@@ -162,7 +167,9 @@ typealias TMap = Term.Compound.Map
 typealias TSet = Term.Compound.Set
 typealias TApplication = Term.Application
 
+fun Any.toTerm() = Term.of(this)
 fun String.toTerm() = TString(this)
+fun String.parseTerm() = Term.parse(this)
 fun Int.toTerm() = TInteger(this)
 fun kotlin.collections.List<Any?>.toTerm() = TList(this.map { of(it) })
 fun kotlin.collections.Map<*,*>.toTerm() = TMap(this.map { Pair(of(it.key) as? TConstant<*> ?: throw SyntaxError("Map key must be a Constant"), of(it.value)) }.toMap())

@@ -1,12 +1,12 @@
 package io.kutoa
 
 import groovy.lang.Binding
-import groovy.lang.Closure
 import groovy.lang.GroovyShell
 import io.kutoa.Term.Companion.kmap
 import io.kutoa.Term.Companion.of
 import org.apache.camel.FluentProducerTemplate
 import org.apache.camel.impl.DefaultCamelContext
+import org.codehaus.groovy.control.CompilerConfiguration
 import us.bpsm.edn.Keyword
 import us.bpsm.edn.Symbol
 import us.bpsm.edn.parser.Parsers
@@ -49,7 +49,8 @@ sealed class Term {
             constructor(throwable: Throwable) : this(ErrorInfo(throwable))
             constructor(name: String, message: String) : this(ErrorInfo(name, message))
             override val isConstant = true
-            override fun toString() = toEDNPretty()
+            // TODO: Create EDN representation of Error
+            override fun toString() = value.toString()
         }
         data class Symbol(override val value: us.bpsm.edn.Symbol): Atom<us.bpsm.edn.Symbol>(value) {
             constructor(prefix: String, name: String) : this(us.bpsm.edn.Symbol.newSymbol(prefix, name))
@@ -63,10 +64,7 @@ sealed class Term {
             override fun toString() = toEDNPretty()
         }
 
-        // TODO: Create proper EDN representation for errors
-        @Suppress("IMPLICIT_CAST_TO_ANY")
-        override fun unwrap() =
-            if (this is Error) value.toString() else value
+        override fun unwrap() = value
     }
     sealed class Compound<out T:Any>(open val value: T) : Term() {
         data class List(override val value: kotlin.collections.List<Term>): Compound<kotlin.collections.List<Term>>(value) {
@@ -99,7 +97,7 @@ sealed class Term {
         override fun toString() = toEDNPretty()
     }
 
-    internal abstract fun unwrap(): Any
+    abstract fun unwrap(): Any
 
     // TODO: Custom EDN pretty printing. For now, default is better than the pretty printer provided
     protected fun toEDNPretty() = toEDN()
@@ -140,6 +138,8 @@ sealed class Term {
         fun kmap(value: Map<String, Any?>) = TMap(value.mapKeys { TKeyword(it.key) }.mapValues { Term.of(it.value) })
     }
 }
+
+fun term(value: Any?) = Term.of(value)
 
 data class ErrorInfo(val code: String, val message: String) {
     constructor(throwable: Throwable) : this(throwable::class.java.name, throwable.message?:"")
@@ -301,7 +301,7 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
             return Evaluation(term, bindings, cachedResult, Operation.CACHE_HIT, emptyList(), emptyMap())
         }
 
-        fun applyFunction(term: TApplication, bindings: Bindings, result: Term, subInvocations: List<Evaluation> = emptyList()) =
+        fun applyFunction(term: TApplication, bindings: Bindings, result: Term, subInvocations: kotlin.collections.List<Evaluation> = emptyList()) =
             Evaluation(term, bindings, result, Operation.APPLY_FUNCTION, subInvocations, emptyMap())
     }
 
@@ -366,7 +366,9 @@ class GroovyScriptFunction : Function(symbol) {
         val scriptArgs = extractScriptArgs(term.args)
         val subInvocations = mutableListOf<Evaluation>()
         val binding = createBinding(scriptArgs, computer, bindings, subInvocations)
-        val shell = GroovyShell(binding)
+        val compilerConfiguration = CompilerConfiguration.DEFAULT
+        compilerConfiguration.scriptBaseClass = "io.kutoa.KutoaGroovyScript"
+        val shell = GroovyShell(binding, compilerConfiguration)
         val result = shell.evaluate(source.value, identifier.toString())
         return Evaluation.applyFunction(term, bindings, Term.of(result), subInvocations)
     }
@@ -383,7 +385,7 @@ class GroovyScriptFunction : Function(symbol) {
         return args[1] as? TMap ?: throw SyntaxError("Second argument to '${identifier.value}' must be of type Map")
     }
 
-    private fun createBinding(args: TMap, parentStep: Computer, bindings: Bindings,
+    private fun createBinding(args: TMap, computer: Computer, bindings: Bindings,
                               subInvocations: MutableList<Evaluation>): Binding {
         val binding = Binding()
         args.value.forEach { key, term ->
@@ -392,28 +394,19 @@ class GroovyScriptFunction : Function(symbol) {
             val value = term.unwrap()
             binding.setVariable(variableName, value)
         }
-        binding.setVariable("invoke", TermEvaluatingClosure(parentStep, bindings, subInvocations))
+        binding.setVariable("__computer", computer)
+        binding.setVariable("__bindings", bindings)
+        binding.setVariable("__substeps", subInvocations)
         return binding
     }
 
     companion object {
+
         val symbol = TSymbol("sys.scripting.groovy", "eval")
+
         fun application(script: String, vararg args : Pair<String, Any?>)
             = TApplication(symbol, listOf(TString(script), kmap(args.toMap())))
-        private class TermEvaluatingClosure(private var computer: Computer, private val bindings: Bindings, private val invocations: MutableList<Evaluation>)
-            : Closure<Evaluation>(null) {
-            @Suppress("unused")
-            fun doCall(identifier: String, vararg args: Any?) : Any {
-                val symbol = TSymbol(identifier.substringBefore('/'), identifier.substringAfter('/'))
-                val argsTerm = functionArgs(args)
-                val invocationTerm = TApplication(symbol, argsTerm)
-                val evaluation = computer.evaluate(invocationTerm, bindings)
-                invocations.add(evaluation)
-                return evaluation.result.unwrap()
-            }
 
-            private fun functionArgs(args: Array<out Any?>) = args.map { Term.of(it) }
-        }
         private fun Keyword.toVariableName() : String = this.toString().replaceFirst(":", "")
     }
 }

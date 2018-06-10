@@ -234,7 +234,8 @@ class Tests : StringSpec() {
         }
 
         "Can evaluate a Groovy script that calls out to another Groovy script" {
-            val term = GroovyScriptFunction.application("5 * invoke('${GroovyScriptFunction.symbol}', '5 * 5', [:])")
+            val script = "5 * '${GroovyScriptFunction.symbol}'('5 * 5', [:])"
+            val term = GroovyScriptFunction.application(script)
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,

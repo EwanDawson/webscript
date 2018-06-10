@@ -189,7 +189,7 @@ class Tests : StringSpec() {
             )
         }
 
-        "Groovy script with namespaced variables can be evaluated" {
+        "Groovy script with name-spaced variables can be evaluated" {
             val term = GroovyScriptFunction.application(
                 "binding['local/a'] + binding['local/b']",
                 "local/a" to 1, "local/b" to 2
@@ -230,6 +230,26 @@ class Tests : StringSpec() {
                 dependencies = emptyMap(),
                 result = TError("java.lang.ArithmeticException", "Division by zero"),
                 subSteps = term.args.map(Evaluation.Companion::constant)
+            )
+        }
+
+        "Can evaluate a Groovy script that calls out to another Groovy script" {
+            val term = GroovyScriptFunction.application("5 * invoke('${GroovyScriptFunction.symbol}', '5 * 5', [:])")
+            term shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = emptyMap(),
+                dependencies = emptyMap(),
+                result = 125.toTerm(),
+                subSteps = term.args.map(Evaluation.Companion::constant) +
+                    Evaluation(
+                        input = GroovyScriptFunction.application("5 * 5"),
+                        operation = APPLY_FUNCTION,
+                        bindings = emptyMap(),
+                        dependencies = emptyMap(),
+                        result = 25.toTerm(),
+                        subSteps = GroovyScriptFunction.application("5 * 5").args.map(Evaluation.Companion::constant)
+                    )
             )
         }
     }

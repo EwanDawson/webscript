@@ -301,8 +301,8 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
             return Evaluation(term, bindings, cachedResult, Operation.CACHE_HIT, emptyList(), emptyMap())
         }
 
-        fun applyFunction(term: TApplication, bindings: Bindings, result: Term) =
-            Evaluation(term, bindings, result, Operation.APPLY_FUNCTION, emptyList(), emptyMap())
+        fun applyFunction(term: TApplication, bindings: Bindings, result: Term, subInvocations: List<Evaluation> = emptyList()) =
+            Evaluation(term, bindings, result, Operation.APPLY_FUNCTION, subInvocations, emptyMap())
     }
 
     enum class Operation {
@@ -364,10 +364,11 @@ class GroovyScriptFunction : Function(symbol) {
         checkSyntax(term.args)
         val source = extractSource(term.args)
         val scriptArgs = extractScriptArgs(term.args)
-        val binding = createBinding(scriptArgs, computer, bindings)
+        val subInvocations = mutableListOf<Evaluation>()
+        val binding = createBinding(scriptArgs, computer, bindings, subInvocations)
         val shell = GroovyShell(binding)
         val result = shell.evaluate(source.value, identifier.toString())
-        return Evaluation.applyFunction(term, bindings, Term.of(result))
+        return Evaluation.applyFunction(term, bindings, Term.of(result), subInvocations)
     }
 
     private fun checkSyntax(args: kotlin.collections.List<Term>) {
@@ -382,7 +383,8 @@ class GroovyScriptFunction : Function(symbol) {
         return args[1] as? TMap ?: throw SyntaxError("Second argument to '${identifier.value}' must be of type Map")
     }
 
-    private fun createBinding(args: TMap, parentStep: Computer, bindings: Bindings): Binding {
+    private fun createBinding(args: TMap, parentStep: Computer, bindings: Bindings,
+                              subInvocations: MutableList<Evaluation>): Binding {
         val binding = Binding()
         args.value.forEach { key, term ->
             val keyword = key as? TKeyword ?: TKeyword(key.value.toString())
@@ -390,7 +392,7 @@ class GroovyScriptFunction : Function(symbol) {
             val value = term.unwrap()
             binding.setVariable(variableName, value)
         }
-        binding.setVariable("invoke", TermEvaluatingClosure(parentStep, bindings))
+        binding.setVariable("invoke", TermEvaluatingClosure(parentStep, bindings, subInvocations))
         return binding
     }
 
@@ -398,14 +400,16 @@ class GroovyScriptFunction : Function(symbol) {
         val symbol = TSymbol("sys.scripting.groovy", "eval")
         fun application(script: String, vararg args : Pair<String, Any?>)
             = TApplication(symbol, listOf(TString(script), kmap(args.toMap())))
-        private class TermEvaluatingClosure(private var computer: Computer, private val bindings: Bindings)
+        private class TermEvaluatingClosure(private var computer: Computer, private val bindings: Bindings, private val invocations: MutableList<Evaluation>)
             : Closure<Evaluation>(null) {
             @Suppress("unused")
             fun doCall(identifier: String, vararg args: Any?) : Any {
                 val symbol = TSymbol(identifier.substringBefore('/'), identifier.substringAfter('/'))
                 val argsTerm = functionArgs(args)
                 val invocationTerm = TApplication(symbol, argsTerm)
-                return computer.evaluate(invocationTerm, bindings)
+                val evaluation = computer.evaluate(invocationTerm, bindings)
+                invocations.add(evaluation)
+                return evaluation.result.unwrap()
             }
 
             private fun functionArgs(args: Array<out Any?>) = args.map { Term.of(it) }

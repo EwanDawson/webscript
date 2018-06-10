@@ -204,7 +204,7 @@ class Tests : StringSpec() {
             )
         }
 
-        "Groovy script with compilation error cannot be evaluated" {
+        "Evaluating a Groovy script with a syntax error gives an error result" {
             val term = GroovyScriptFunction.application("}{")
             term shouldEvaluateTo Evaluation(
                 input = term,
@@ -217,6 +217,18 @@ class Tests : StringSpec() {
                     "   ^$nl" +
                     nl +
                     "1 error$nl"),
+                subSteps = term.args.map(Evaluation.Companion::constant)
+            )
+        }
+
+        "Evaluating a Groovy script with a runtime error gives an error result" {
+            val term = GroovyScriptFunction.application("1/0")
+            term shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = emptyMap(),
+                dependencies = emptyMap(),
+                result = TError("java.lang.ArithmeticException", "Division by zero"),
                 subSteps = term.args.map(Evaluation.Companion::constant)
             )
         }

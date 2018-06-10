@@ -381,22 +381,23 @@ class GroovyScriptFunction : Function(symbol) {
     }
 
     private fun checkSyntax(args: kotlin.collections.List<Term>) {
-        if (args.size != 2) throw SyntaxError("$identifier must have two arguments")
+        if (args.isEmpty() || args.size > 2) throw SyntaxError("$identifier must have one or two arguments")
     }
 
     private fun extractSource(args: kotlin.collections.List<Term>): TString {
         return args[0] as? TString ?: throw SyntaxError("First argument to $identifier must be of type String")
     }
 
-    private fun extractScriptArgs(args: kotlin.collections.List<Term>): TMap {
-        return args[1] as? TMap ?: throw SyntaxError("Second argument to '${identifier.value}' must be of type Map")
+    private fun extractScriptArgs(args: kotlin.collections.List<Term>): TMap? {
+        return if (args.size != 2) null
+        else args[1] as? TMap ?: throw SyntaxError("Second argument to '$symbol' must be of type Map")
     }
 
-    private fun createBinding(args: TMap, computer: Computer, bindings: Bindings,
+    private fun createBinding(args: TMap?, computer: Computer, bindings: Bindings,
                               subInvocations: MutableList<Evaluation>): Binding {
         val binding = Binding()
         val argMap = mutableMapOf<String, Any>()
-        args.value.forEach { key, term ->
+        args?.value?.forEach { key, term ->
             val keyword = key as? TKeyword ?: TKeyword(key.value.toString())
             val variableName = keyword.value.toVariableName()
             val value = term.unwrap()
@@ -415,7 +416,7 @@ class GroovyScriptFunction : Function(symbol) {
         val symbol = TSymbol("sys.scripting.groovy", "eval")
 
         fun application(script: String, vararg args : Pair<String, Any?>)
-            = TApplication(symbol, listOf(TString(script), kmap(args.toMap())))
+            = TApplication(symbol, listOf(TString(script)) + if (args.isNotEmpty()) listOf(kmap(args.toMap())) else emptyList())
 
         private fun Keyword.toVariableName() : String = this.toString().replaceFirst(":", "")
     }

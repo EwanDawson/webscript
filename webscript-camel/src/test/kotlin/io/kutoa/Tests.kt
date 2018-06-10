@@ -197,7 +197,7 @@ class Tests : StringSpec() {
         }
 
         "Evaluating a Groovy script with a syntax error gives an error result" {
-            val term = """(sys.scripting.groovy/eval "}{" {})""".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "}{")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -214,7 +214,7 @@ class Tests : StringSpec() {
         }
 
         "Evaluating a Groovy script with a runtime error gives an error result" {
-            val term = "(sys.scripting.groovy/eval \"1/0\" {})".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "1/0")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -226,7 +226,7 @@ class Tests : StringSpec() {
         }
 
         "Can evaluate a Groovy script that calls out to another Groovy script" {
-            val term = "(sys.scripting.groovy/eval \"5 * 'sys.scripting.groovy/eval'('5 * 5', [:])\" {})".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "5 * 'sys.scripting.groovy/eval'('5 * 5')")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,

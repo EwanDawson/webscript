@@ -132,21 +132,19 @@ class Tests : StringSpec() {
         }
 
         "Function application with constant arguments" {
-            val term = "(sys/list 1 2 3)".parseTerm() as TApplication
-            val args = (1..3).map(Any::toTerm)
+            val term = """(sys/list 1 2 3)""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = args.map(Evaluation.Companion::constant),
-                result = TList(args)
+                subSteps = term.args.map(Evaluation.Companion::constant),
+                result = TList(term.args)
             )
         }
 
         "Function application is cached" {
-            val args = (1..3).map { TInteger(it) }
-            val term = TApplication(TSymbol("sys", "list"), args)
+            val term = """(sys/list 1 2 3)""".parseTerm() as TApplication
             cache.clear()
             val results = (1..2).map { computer.evaluate(term, emptyMap()) }
             results[0] shouldBe Evaluation(
@@ -154,7 +152,7 @@ class Tests : StringSpec() {
                 operation = APPLY_FUNCTION,
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = args.map { integer -> Evaluation(
+                subSteps = term.args.map { integer -> Evaluation(
                     input = integer,
                     operation = CONSTANT,
                     bindings = emptyMap(),
@@ -162,7 +160,7 @@ class Tests : StringSpec() {
                     subSteps = emptyList(),
                     result = integer
                 ) },
-                result = TList(args)
+                result = TList(term.args)
             )
             results[1] shouldBe Evaluation(
                 input = term,
@@ -170,12 +168,12 @@ class Tests : StringSpec() {
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
                 subSteps = emptyList(),
-                result = TList(args)
+                result = TList(term.args)
             )
         }
 
         "Basic Groovy script can be evaluated" {
-            val term = "(sys.scripting.groovy/eval \"a + b\" {:a 1, :b 2})".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "a + b" {:a 1, :b 2})""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -187,8 +185,7 @@ class Tests : StringSpec() {
         }
 
         "Groovy script with name-spaced variables can be evaluated" {
-            val script = "\"arg.'local/a' + arg.'local/b'\""
-            val term = "(sys.scripting.groovy/eval $script {:local/a 1, :local/b 2})".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "arg.'local/a' + arg.'local/b'" {:local/a 1, :local/b 2})""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -200,7 +197,7 @@ class Tests : StringSpec() {
         }
 
         "Evaluating a Groovy script with a syntax error gives an error result" {
-            val term = "(sys.scripting.groovy/eval \"}{\" {})".parseTerm() as TApplication
+            val term = """(sys.scripting.groovy/eval "}{" {})""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,

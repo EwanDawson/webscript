@@ -129,7 +129,7 @@ sealed class Term {
                 is Keyword -> TKeyword(value)
                 is RandomAccess -> throw SyntaxError("Not a valid expression: '$value'")
                 is kotlin.collections.List<*> -> {
-                    val list = value as List<Any?>
+                    val list = value as kotlin.collections.List<Any?>
                     val firstTerm = list.firstOrNull()?.toTerm()
                     if (firstTerm != null && firstTerm is TSymbol) TApplication(firstTerm, list.drop(1).map(Term.Companion::of))
                     else list.toTerm()

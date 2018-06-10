@@ -132,8 +132,8 @@ class Tests : StringSpec() {
         }
 
         "Function application with constant arguments" {
-            val args = (1..3).map { TInteger(it) }
-            val term = TApplication(TSymbol("sys", "list"), args)
+            val term = "(sys/list 1 2 3)".parseTerm() as TApplication
+            val args = (1..3).map(Any::toTerm)
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -175,10 +175,7 @@ class Tests : StringSpec() {
         }
 
         "Basic Groovy script can be evaluated" {
-            val term = GroovyScriptFunction.application(
-                "a + b",
-                "a" to 1, "b" to 2
-            )
+            val term = "(sys.scripting.groovy/eval \"a + b\" {:a 1, :b 2})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -190,10 +187,8 @@ class Tests : StringSpec() {
         }
 
         "Groovy script with name-spaced variables can be evaluated" {
-            val term = GroovyScriptFunction.application(
-                "binding['local/a'] + binding['local/b']",
-                "local/a" to 1, "local/b" to 2
-            )
+            val script = "\"binding['local/a'] + binding['local/b']\""
+            val term = "(sys.scripting.groovy/eval $script {:local/a 1, :local/b 2})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -205,7 +200,7 @@ class Tests : StringSpec() {
         }
 
         "Evaluating a Groovy script with a syntax error gives an error result" {
-            val term = GroovyScriptFunction.application("}{")
+            val term = "(sys.scripting.groovy/eval \"}{\" {})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -222,7 +217,7 @@ class Tests : StringSpec() {
         }
 
         "Evaluating a Groovy script with a runtime error gives an error result" {
-            val term = GroovyScriptFunction.application("1/0")
+            val term = "(sys.scripting.groovy/eval \"1/0\" {})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -234,8 +229,7 @@ class Tests : StringSpec() {
         }
 
         "Can evaluate a Groovy script that calls out to another Groovy script" {
-            val script = "5 * '${GroovyScriptFunction.symbol}'('5 * 5', [:])"
-            val term = GroovyScriptFunction.application(script)
+            val term = "(sys.scripting.groovy/eval \"5 * 'sys.scripting.groovy/eval'('5 * 5', [:])\" {})".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -252,6 +246,10 @@ class Tests : StringSpec() {
                         subSteps = GroovyScriptFunction.application("5 * 5").args.map(Evaluation.Companion::constant)
                     )
             )
+        }
+
+        "Can make an HTTP get request" {
+
         }
     }
 }

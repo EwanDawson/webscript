@@ -1,5 +1,10 @@
 package io.kutoa
 
+import com.confluex.mock.http.MockHttpServer
+import com.confluex.mock.http.matchers.HttpMatchers
+import io.kotlintest.Description
+import io.kotlintest.Spec
+import io.kotlintest.extensions.TestListener
 import io.kotlintest.properties.Gen
 import io.kotlintest.properties.forAll
 import io.kotlintest.shouldBe
@@ -10,6 +15,9 @@ import java.math.BigDecimal
 import java.math.BigInteger
 
 class Tests : StringSpec() {
+
+    override fun listeners() = listOf(HttpServerLister)
+
     init {
         val camel = DefaultCamelContext()
         camel.start()
@@ -238,7 +246,36 @@ class Tests : StringSpec() {
         }
 
         "Can make an HTTP get request" {
-
+            HttpServerLister.server!!.respondTo(HttpMatchers.anyRequest())
+                .withBody("Hello world!")
+            val port = HttpServerLister.server!!.port
+            val term = """(sys.net.http/get test/url)""".parseTerm() as TApplication
+            val context = mapOf(TSymbol("test/url") to TString("http://localhost:$port"))
+            term withBindings context shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = context,
+                dependencies = context,
+                result = "Hello world!".toTerm(),
+                subSteps = listOf(
+                    Evaluation(
+                        input = TSymbol("test/url"),
+                        operation = BIND_SYMBOL,
+                        bindings = context,
+                        dependencies = context,
+                        result = TString("http://localhost:$port"),
+                        subSteps = emptyList()
+                    ),
+                    Evaluation(
+                        input = TApplication(TSymbol("sys.net.http/get"), listOf(TString("http://localhost:$port"))),
+                        operation = APPLY_FUNCTION,
+                        bindings = context,
+                        dependencies = emptyMap(),
+                        result = "Hello world!".toTerm(),
+                        subSteps = emptyList()
+                    )
+                )
+            )
         }
     }
 }
@@ -382,3 +419,15 @@ class TMapGen<out K: TConstant<*>, out V: Term>(private val keyGen: Gen<K>, priv
 }
 
 data class Input(val term: Term, val bindings: Bindings)
+
+object HttpServerLister : TestListener {
+    var server : MockHttpServer? = null
+
+    override fun beforeSpec(description: Description, spec: Spec) {
+        server = MockHttpServer()
+    }
+
+    override fun afterSpec(description: Description, spec: Spec) {
+        server?.stop()
+    }
+}

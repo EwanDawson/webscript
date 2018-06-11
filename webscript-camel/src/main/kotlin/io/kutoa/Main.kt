@@ -238,11 +238,26 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
 
     private fun evaluateApplication(term: TApplication, bindings: Bindings) : Evaluation =
         cache.getOrCompute(term, bindings) {
+            val subSteps = mutableListOf<Evaluation>()
+            val dependencies = mutableMapOf<TSymbol, Term>()
             when {
-                bindings.containsKey(term.symbol) ->
-                    evaluateSymbol(term.symbol, createMacroBindings(term.symbol, term.args, bindings))
-                builtInsMap.containsKey(term.symbol) ->
+                bindings.containsKey(term.symbol) -> {
+                    val evaluation = evaluateSymbol(term.symbol, createMacroBindings(term.symbol, term.args, bindings))
+                    dependencies[term.symbol] = evaluation.result
+                    dependencies.putAll(evaluation.dependencies)
+                    subSteps.add(evaluation)
+                    if (evaluation.result.isConstant)
+                        Evaluation(term, bindings, evaluation.result, Evaluation.Operation.APPLY_FUNCTION, subSteps, dependencies)
+                    else {
+                        val subEval = evaluate(evaluation.result, bindings)
+                        dependencies.putAll(subEval.dependencies)
+                        subSteps.add(subEval)
+                        Evaluation(term, bindings, subEval.result, Evaluation.Operation.APPLY_FUNCTION, subSteps, dependencies)
+                    }
+                }
+                builtInsMap.containsKey(term.symbol) -> {
                     evaluateBuiltIn(term, builtInsMap[term.symbol]!!, bindings)
+                }
                 else -> {
                     val error = UnknownSymbolException(term.symbol)
                     Evaluation.bindSymbol(term.symbol, bindings, error)
@@ -253,23 +268,33 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
     private fun createMacroBindings(identifier: TSymbol, args: kotlin.collections.List<Term>, bindings: Bindings) : Bindings =
         bindings + mapOf(macroIdentifier to identifier, macroArgs to TList(args))
 
+    // TODO: This is a mess and needs tidied up (tracking of substeps and dependencies)
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
         val substeps = mutableListOf<Evaluation>()
+        val dependencies = mutableMapOf<TSymbol, Term>()
         val resolvedArgs = term.args.map {
             if (it.isConstant) it
             else {
                 val evaluation = evaluate(it, bindings)
                 substeps.add(evaluation)
+                dependencies.putAll(evaluation.dependencies)
                 evaluation.result
             }
         }
         val evaluation : Evaluation
         evaluation = try {
-            function.apply(TApplication(term.symbol, resolvedArgs), bindings, this)
+            val subEvaluation = function.apply(TApplication(term.symbol, resolvedArgs), bindings, this)
+            if (resolvedArgs == term.args) subEvaluation
+            else {
+                substeps.add(subEvaluation)
+                dependencies.putAll(subEvaluation.dependencies)
+                Evaluation(term, bindings, subEvaluation.result, Evaluation.Operation.APPLY_FUNCTION, substeps, dependencies)
+            }
         } catch (e: Exception) {
             Evaluation.applyFunction(term, bindings, e.toTerm())
         }
-        return evaluation.copy(subSteps = substeps + evaluation.subSteps)
+        substeps.addAll(evaluation.subSteps)
+        return evaluation.copy(subSteps = substeps.distinct(), dependencies = dependencies)
     }
 }
 

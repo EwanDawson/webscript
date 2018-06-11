@@ -2,7 +2,6 @@ package io.kutoa
 
 abstract class KutoaGroovyScript extends Script {
     def methodMissing(String name, def args) {
-        println "$name($args)"
         final computer = binding.variables["__computer"] as Computer
         final bindings = binding.variables["__bindings"] as Map<Term.Atom.Symbol, ? extends Term>
         final substeps = binding.variables["__substeps"] as java.util.List<Evaluation>

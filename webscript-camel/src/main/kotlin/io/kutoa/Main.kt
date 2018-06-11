@@ -223,8 +223,13 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
 
     private fun evaluateSymbol(term: TSymbol, bindings: Bindings) : Evaluation =
         if (bindings.containsKey(term)) {
-            val substep = evaluate(bindings[term]!!, bindings)
-            Evaluation.bindSymbol(term, bindings, substep.result, substep)
+            val binding = bindings[term]!!
+            if (binding.isConstant) {
+                Evaluation(term, bindings, binding, Evaluation.Operation.BIND_SYMBOL, emptyList(), mapOf(term to binding))
+            } else {
+                val substep = evaluate(bindings[term]!!, bindings)
+                Evaluation(term, bindings, substep.result, Evaluation.Operation.BIND_SYMBOL, listOf(substep), mapOf(term to binding) + substep.dependencies)
+            }
         }
         else {
             val error = UnknownSymbolException(term)
@@ -249,10 +254,18 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
         bindings + mapOf(macroIdentifier to identifier, macroArgs to TList(args))
 
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
-        val substeps = term.args.map { evaluate(it, bindings) }
+        val substeps = mutableListOf<Evaluation>()
+        val resolvedArgs = term.args.map {
+            if (it.isConstant) it
+            else {
+                val evaluation = evaluate(it, bindings)
+                substeps.add(evaluation)
+                evaluation.result
+            }
+        }
         val evaluation : Evaluation
         evaluation = try {
-            function.apply(TApplication(term.symbol, substeps.map { it.result }), bindings, this)
+            function.apply(TApplication(term.symbol, resolvedArgs), bindings, this)
         } catch (e: Exception) {
             Evaluation.applyFunction(term, bindings, e.toTerm())
         }

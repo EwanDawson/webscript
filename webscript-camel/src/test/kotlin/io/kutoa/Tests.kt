@@ -93,7 +93,7 @@ class Tests : StringSpec() {
                 operation = BIND_SYMBOL,
                 bindings = bindings,
                 dependencies = bindings,
-                subSteps = listOf(Evaluation.constant(value, bindings)),
+                subSteps = emptyList(),
                 result = value
             )
         }
@@ -138,7 +138,7 @@ class Tests : StringSpec() {
                 operation = APPLY_FUNCTION,
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = term.args.map(Evaluation.Companion::constant),
+                subSteps = emptyList(),
                 result = TList(term.args)
             )
         }
@@ -152,14 +152,7 @@ class Tests : StringSpec() {
                 operation = APPLY_FUNCTION,
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = term.args.map { integer -> Evaluation(
-                    input = integer,
-                    operation = CONSTANT,
-                    bindings = emptyMap(),
-                    dependencies = emptyMap(),
-                    subSteps = emptyList(),
-                    result = integer
-                ) },
+                subSteps = emptyList(),
                 result = TList(term.args)
             )
             results[1] shouldBe Evaluation(
@@ -180,7 +173,7 @@ class Tests : StringSpec() {
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
                 result = 3.toTerm(),
-                subSteps = term.args.map(Evaluation.Companion::constant)
+                subSteps = emptyList()
             )
         }
 
@@ -192,7 +185,7 @@ class Tests : StringSpec() {
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
                 result = 3.toTerm(),
-                subSteps = term.args.map(Evaluation.Companion::constant)
+                subSteps = emptyList()
             )
         }
 
@@ -209,7 +202,7 @@ class Tests : StringSpec() {
                     "   ^$nl" +
                     nl +
                     "1 error$nl"),
-                subSteps = term.args.map(Evaluation.Companion::constant)
+                subSteps = emptyList()
             )
         }
 
@@ -221,7 +214,7 @@ class Tests : StringSpec() {
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
                 result = TError("java.lang.ArithmeticException", "Division by zero"),
-                subSteps = term.args.map(Evaluation.Companion::constant)
+                subSteps = emptyList()
             )
         }
 
@@ -233,15 +226,14 @@ class Tests : StringSpec() {
                 bindings = emptyMap(),
                 dependencies = emptyMap(),
                 result = 125.toTerm(),
-                subSteps = term.args.map(Evaluation.Companion::constant) +
-                    Evaluation(
-                        input = GroovyScriptFunction.application("5 * 5"),
-                        operation = APPLY_FUNCTION,
-                        bindings = emptyMap(),
-                        dependencies = emptyMap(),
-                        result = 25.toTerm(),
-                        subSteps = GroovyScriptFunction.application("5 * 5").args.map(Evaluation.Companion::constant)
-                    )
+                subSteps = listOf(Evaluation(
+                    input = GroovyScriptFunction.application("5 * 5"),
+                    operation = APPLY_FUNCTION,
+                    bindings = emptyMap(),
+                    dependencies = emptyMap(),
+                    result = 25.toTerm(),
+                    subSteps = emptyList()
+                ))
             )
         }
 

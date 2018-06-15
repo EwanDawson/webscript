@@ -246,11 +246,13 @@ class Tests : StringSpec() {
         }
 
         "Can make an HTTP get request" {
-            HttpServerLister.server!!.respondTo(HttpMatchers.anyRequest())
+            HttpServerLister.server!!.respondTo(HttpMatchers.header("MyHeader", "123"))
                 .withBody("Hello world!")
             val port = HttpServerLister.server!!.port
             val term = """(sys.net.http/get test/url)""".parseTerm() as TApplication
-            val context = mapOf(TSymbol("test/url") to TString("http://localhost:$port"))
+            val options = """{:url "http://localhost:$port"
+                              :headers {"MyHeader" "123"}}""".parseTerm()
+            val context = mapOf(TSymbol("test/url") to options)
             term withBindings context shouldEvaluateTo Evaluation(
                 input = term,
                 operation = APPLY_FUNCTION,
@@ -263,11 +265,11 @@ class Tests : StringSpec() {
                         operation = BIND_SYMBOL,
                         bindings = context,
                         dependencies = context,
-                        result = TString("http://localhost:$port"),
+                        result = options,
                         subSteps = emptyList()
                     ),
                     Evaluation(
-                        input = TApplication(TSymbol("sys.net.http/get"), listOf(TString("http://localhost:$port"))),
+                        input = TApplication(TSymbol("sys.net.http/get"), listOf(options)),
                         operation = APPLY_FUNCTION,
                         bindings = context,
                         dependencies = emptyMap(),

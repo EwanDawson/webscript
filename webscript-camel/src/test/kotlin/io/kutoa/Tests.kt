@@ -279,6 +279,66 @@ class Tests : StringSpec() {
                 )
             )
         }
+
+        "Bind to function application macro" {
+            val macro = """(sys.scripting.groovy/eval "5-1")""".parseTerm()
+            val context = mapOf(TSymbol("test/four") to macro)
+            val term = """(test/four)""".parseTerm() as TApplication
+            term withBindings context shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = context,
+                dependencies = context,
+                result = 4.toTerm(),
+                subSteps = listOf(Evaluation(
+                    input = term.symbol,
+                    operation = BIND_SYMBOL,
+                    bindings = context +
+                        (TSymbol("sys.macro/identifier") to term.symbol) +
+                        (TSymbol("sys.macro/args") to term.args.toTerm()),
+                    dependencies = context,
+                    result = 4.toTerm(),
+                    subSteps = listOf(Evaluation(
+                        input = macro,
+                        operation = APPLY_FUNCTION,
+                        bindings = context,
+                        result = 4.toTerm(),
+                        dependencies = emptyMap(),
+                        subSteps = emptyList()
+                    ))
+                ))
+            )
+        }
+
+        "Bind to function application macro that uses arguments" {
+            val macro = """(sys.scripting.groovy/eval "value * 2" {:value (sys/get sys.macro/args 1)})""".parseTerm()
+            val context = mapOf(TSymbol("test/double") to macro)
+            val term = """(test/double 3)""".parseTerm() as TApplication
+            term withBindings context shouldEvaluateTo Evaluation(
+                input = term,
+                operation = APPLY_FUNCTION,
+                bindings = context,
+                dependencies = context,
+                result = 6.toTerm(),
+                subSteps = listOf(Evaluation(
+                    input = term.symbol,
+                    operation = BIND_SYMBOL,
+                    bindings = context +
+                        (TSymbol("sys.macro/identifier") to term.symbol) +
+                        (TSymbol("sys.macro/args") to term.args.toTerm()),
+                    dependencies = context,
+                    result = 6.toTerm(),
+                    subSteps = listOf(Evaluation(
+                        input = macro,
+                        operation = APPLY_FUNCTION,
+                        bindings = context,
+                        result = 6.toTerm(),
+                        dependencies = emptyMap(),
+                        subSteps = emptyList()
+                    ))
+                ))
+            )
+        }
     }
 }
 

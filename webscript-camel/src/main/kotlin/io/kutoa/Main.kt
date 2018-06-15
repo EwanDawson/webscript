@@ -227,7 +227,8 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             if (binding.isConstant) {
                 Evaluation(term, bindings, binding, Evaluation.Operation.BIND_SYMBOL, emptyList(), mapOf(term to binding))
             } else {
-                val substep = evaluate(bindings[term]!!, bindings)
+                val bindingsLessMacro = bindings - macroIdentifier - macroArgs
+                val substep = evaluate(bindings[term]!!, bindingsLessMacro)
                 Evaluation(term, bindings, substep.result, Evaluation.Operation.BIND_SYMBOL, listOf(substep), mapOf(term to binding) + substep.dependencies)
             }
         }

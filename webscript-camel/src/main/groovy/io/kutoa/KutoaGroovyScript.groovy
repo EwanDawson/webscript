@@ -11,7 +11,7 @@ abstract class KutoaGroovyScript extends Script {
         final evaluation = computer.evaluate(term, bindings)
         substeps << evaluation
         final result = evaluation.result
-        if (result instanceof Term.Atom.Error) throw new RuntimeException(result.unwrap().toString())
+        if (result instanceof Term.Atom.Constant.Error) throw new RuntimeException(result.unwrap().toString())
         return evaluation.result.unwrap()
     }
 }

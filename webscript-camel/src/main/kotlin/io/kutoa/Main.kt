@@ -22,7 +22,7 @@ typealias TInteger = Term.Atom.Constant.Integer
 typealias TKeyword = Term.Atom.Constant.Keyword
 typealias TNil = Term.Atom.Constant.Nil
 typealias TString = Term.Atom.Constant.String
-typealias TError = Term.Atom.Error
+typealias TError = Term.Atom.Constant.Error
 typealias TConstant<T> = Term.Atom.Constant<T>
 typealias TSymbol = Term.Atom.Symbol
 typealias TAtom<T> = Term.Atom<T>
@@ -44,9 +44,6 @@ fun Throwable.toTerm() = TError(this)
 typealias Bindings = Map<TSymbol, Term>
 
 class Computer(builtIns: kotlin.collections.List<Function>, private val cache: Cache) {
-
-    private val macroIdentifier = TSymbol("sys.macro", "identifier")
-    private val macroArgs = TSymbol("sys.macro", "args")
 
     private val builtInsMap = builtIns.fold(mapOf()) { map: Map<TSymbol, Function>, evaluator ->
         map + (evaluator.identifier to evaluator)
@@ -92,8 +89,7 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             if (binding.isConstant) {
                 Evaluation(term, bindings, binding, Evaluation.Operation.BIND_SYMBOL, emptyList(), mapOf(term to binding))
             } else {
-                val bindingsLessMacro = bindings - macroIdentifier - macroArgs
-                val substep = evaluate(bindings[term]!!, bindingsLessMacro)
+                val substep = evaluate(bindings[term]!!, bindings)
                 Evaluation(term, bindings, substep.result, Evaluation.Operation.BIND_SYMBOL, listOf(substep), mapOf(term to binding) + substep.dependencies)
             }
         }
@@ -107,9 +103,14 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             val subSteps = mutableListOf<Evaluation>()
             val dependencies = mutableMapOf<TSymbol, Term>()
             when {
+                builtInsMap.containsKey(term.symbol) -> {
+                    evaluateBuiltIn(term, builtInsMap[term.symbol]!!, bindings)
+                }
                 bindings.containsKey(term.symbol) -> {
-                    val evaluation = evaluateSymbol(term.symbol, createMacroBindings(term.symbol, term.args, bindings))
-                    dependencies[term.symbol] = evaluation.result
+                    val expansion = expandMacro(term, bindings[term.symbol] as TApplication)
+                    subSteps.add(Evaluation.macroExpansion(term, bindings, expansion))
+                    val evaluation = evaluateApplication(expansion, bindings)
+                    dependencies[term.symbol] = bindings[term.symbol]!!
                     dependencies.putAll(evaluation.dependencies)
                     subSteps.add(evaluation)
                     if (evaluation.result.isConstant)
@@ -121,9 +122,6 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
                         Evaluation(term, bindings, subEval.result, Evaluation.Operation.APPLY_FUNCTION, subSteps, dependencies)
                     }
                 }
-                builtInsMap.containsKey(term.symbol) -> {
-                    evaluateBuiltIn(term, builtInsMap[term.symbol]!!, bindings)
-                }
                 else -> {
                     val error = UnknownSymbolException(term.symbol)
                     Evaluation.bindSymbol(term.symbol, bindings, error)
@@ -131,8 +129,26 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             }
         }
 
-    private fun createMacroBindings(identifier: TSymbol, args: kotlin.collections.List<Term>, bindings: Bindings) : Bindings =
-        bindings + mapOf(macroIdentifier to identifier, macroArgs to TList(args))
+    private fun expandMacro(source: TApplication, macro: TApplication): TApplication {
+        val bindings = mutableMapOf<TSymbol, Term>()
+        bindings[TSymbol("%name")] = source.symbol
+        source.args.forEachIndexed { index, term -> bindings[TSymbol("%$index")] = term }
+        return expandTerm(macro, bindings) as TApplication
+    }
+
+    private fun expandTerm(term: Term, bindings: Map<TSymbol, Term>) : Term {
+        return when (term) {
+            is Term.Atom.Constant<Any> -> term
+            is Term.Atom.Constant.Error -> term
+            is Term.Atom.Symbol -> bindings[term] ?: term
+            is Term.Compound<Any> -> term.map { t -> expandTerm(t, bindings) }
+            is Term.Application -> {
+                val symbolExpansion = expandTerm(term.symbol, bindings)
+                val expandedSymbol = symbolExpansion as? TSymbol ?: throw SyntaxError("Error expanding function symbol '${term.symbol}' to '$symbolExpansion':  Macro expansion of function symbol must also be a function symbol")
+                TApplication(expandedSymbol, term.args.map { expandTerm(it, bindings) })
+            }
+        }
+    }
 
     // TODO: This is a mess and needs tidied up (tracking of substeps and dependencies)
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
@@ -200,7 +216,7 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
         }
 
         fun bindSymbol(input: TSymbol, bindings: Bindings, throwable: Throwable) : Evaluation {
-            return Evaluation(input, bindings, Term.Atom.Error(throwable), Operation.BIND_SYMBOL, emptyList(), emptyMap())
+            return Evaluation(input, bindings, Term.Atom.Constant.Error(throwable), Operation.BIND_SYMBOL, emptyList(), emptyMap())
         }
 
         fun compound(term: TCompound<*>, bindings: Bindings, result: Term,
@@ -214,6 +230,9 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
 
         fun applyFunction(term: TApplication, bindings: Bindings, result: Term, subInvocations: kotlin.collections.List<Evaluation> = emptyList()) =
             Evaluation(term, bindings, result, Operation.APPLY_FUNCTION, subInvocations, emptyMap())
+
+        fun macroExpansion(term: TApplication, bindings: Bindings, expansion: TApplication) =
+            Evaluation(term, bindings, expansion, Evaluation.Operation.EXPAND_MACRO, emptyList(), mapOf(term.symbol to bindings[term.symbol]!!))
     }
 
     enum class Operation {
@@ -221,7 +240,8 @@ data class Evaluation(val input: Term, val bindings: Bindings, val result: Term,
         COMPOUND,
         BIND_SYMBOL,
         APPLY_FUNCTION,
-        CACHE_HIT
+        CACHE_HIT,
+        EXPAND_MACRO
     }
 }
 

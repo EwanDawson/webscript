@@ -290,15 +290,16 @@ class Tests : StringSpec() {
                 bindings = context,
                 dependencies = context,
                 result = 4.toTerm(),
-                subSteps = listOf(Evaluation(
-                    input = term.symbol,
-                    operation = BIND_SYMBOL,
-                    bindings = context +
-                        (TSymbol("sys.macro/identifier") to term.symbol) +
-                        (TSymbol("sys.macro/args") to term.args.toTerm()),
-                    dependencies = context,
-                    result = 4.toTerm(),
-                    subSteps = listOf(Evaluation(
+                subSteps = listOf(
+                    Evaluation(
+                        input = term,
+                        operation = EXPAND_MACRO,
+                        bindings = context,
+                        dependencies = context,
+                        result = macro,
+                        subSteps = emptyList()
+                    ),
+                    Evaluation(
                         input = macro,
                         operation = APPLY_FUNCTION,
                         bindings = context,
@@ -306,12 +307,11 @@ class Tests : StringSpec() {
                         dependencies = emptyMap(),
                         subSteps = emptyList()
                     ))
-                ))
             )
         }
 
         "Bind to function application macro that uses arguments" {
-            val macro = """(sys.scripting.groovy/eval "value * 2" {:value (sys/get sys.macro/args 1)})""".parseTerm()
+            val macro = """(sys.scripting.groovy/eval "value * 2" {:value %0})""".parseTerm()
             val context = mapOf(TSymbol("test/double") to macro)
             val term = """(test/double 3)""".parseTerm() as TApplication
             term withBindings context shouldEvaluateTo Evaluation(
@@ -320,23 +320,24 @@ class Tests : StringSpec() {
                 bindings = context,
                 dependencies = context,
                 result = 6.toTerm(),
-                subSteps = listOf(Evaluation(
-                    input = term.symbol,
-                    operation = BIND_SYMBOL,
-                    bindings = context +
-                        (TSymbol("sys.macro/identifier") to term.symbol) +
-                        (TSymbol("sys.macro/args") to term.args.toTerm()),
-                    dependencies = context,
-                    result = 6.toTerm(),
-                    subSteps = listOf(Evaluation(
-                        input = macro,
+                subSteps = listOf(
+                    Evaluation(
+                        input = term,
+                        operation = EXPAND_MACRO,
+                        bindings = context,
+                        dependencies = context,
+                        result = """(sys.scripting.groovy/eval "value * 2" {:value 3N})""".parseTerm(),
+                        subSteps = emptyList()
+                    ),
+                    Evaluation(
+                        input = """(sys.scripting.groovy/eval "value * 2" {:value 3N})""".parseTerm(),
                         operation = APPLY_FUNCTION,
                         bindings = context,
                         result = 6.toTerm(),
                         dependencies = emptyMap(),
                         subSteps = emptyList()
-                    ))
-                ))
+                    )
+                )
             )
         }
     }

@@ -48,16 +48,16 @@ sealed class Term {
                 override fun toString() = toEDNPretty()
             }
 
+            data class Error(override val value: ErrorInfo) : Atom<ErrorInfo>(value) {
+                constructor(throwable: Throwable) : this(ErrorInfo(throwable))
+                constructor(name: kotlin.String, message: kotlin.String) : this(ErrorInfo(name, message))
+                override val isConstant = true
+                // TODO: Create EDN representation of Error
+                override fun toString() = value.toString()
+            }
+
             // TODO("Add Lambda atom - should be constant, allowing from closure over variables from currently scoped binding")
             override val isConstant = true
-        }
-
-        data class Error(override val value: ErrorInfo) : Atom<ErrorInfo>(value) {
-            constructor(throwable: Throwable) : this(ErrorInfo(throwable))
-            constructor(name: String, message: String) : this(ErrorInfo(name, message))
-            override val isConstant = true
-            // TODO: Create EDN representation of Error
-            override fun toString() = value.toString()
         }
 
         data class Symbol(override val value: us.bpsm.edn.Symbol): Atom<us.bpsm.edn.Symbol>(value) {

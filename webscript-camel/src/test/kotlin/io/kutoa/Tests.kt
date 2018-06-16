@@ -16,15 +16,16 @@ import java.math.BigInteger
 
 class Tests : StringSpec() {
 
-    override fun listeners() = listOf(HttpServerLister)
+    override fun listeners() = listOf(HttpServer)
 
     init {
         val camel = DefaultCamelContext()
         camel.start()
         val builtIns = listOf(
-            GetFunction(),
-            LetFunction(),
-            ListFunction(),
+            GetFunction,
+            LetFunction,
+            ListFunction,
+            StrConcatFunction,
             HttpGetFunction(camel.createFluentProducerTemplate()),
             GroovyScriptFunction()
         )
@@ -98,11 +99,11 @@ class Tests : StringSpec() {
             val bindings = mapOf(symbol to value)
             symbol withBindings bindings shouldEvaluateTo Evaluation(
                 input = symbol,
+                result = value,
                 operation = BIND_SYMBOL,
-                bindings = bindings,
                 dependencies = bindings,
-                subSteps = emptyList(),
-                result = value
+                bindings = bindings,
+                subSteps = emptyList()
             )
         }
 
@@ -110,10 +111,10 @@ class Tests : StringSpec() {
             val a = TSymbol("a")
             a withBindings emptyMap() shouldEvaluateTo Evaluation (
                 input = a,
-                bindings = emptyMap(),
                 result = TError(UnknownSymbolException(a)),
                 operation = BIND_SYMBOL,
                 dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = emptyList()
             )
         }
@@ -124,18 +125,18 @@ class Tests : StringSpec() {
             val context = mapOf(a to b)
             a withBindings context shouldEvaluateTo Evaluation(
                 input = a,
+                result = TError(UnknownSymbolException(b)),
                 operation = BIND_SYMBOL,
-                bindings = context,
                 dependencies = context,
+                bindings = context,
                 subSteps = listOf(Evaluation(
                     input = b,
+                    result = TError(UnknownSymbolException(b)),
                     operation = BIND_SYMBOL,
-                    bindings = context,
                     dependencies = emptyMap(),
-                    subSteps = emptyList(),
-                    result = TError(UnknownSymbolException(b))
-                )),
-                result = TError(UnknownSymbolException(b))
+                    bindings = context,
+                    subSteps = emptyList()
+                ))
             )
         }
 
@@ -143,11 +144,11 @@ class Tests : StringSpec() {
             val term = """(sys/list 1 2 3)""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
+                result = TList(term.args),
                 operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = emptyList(),
-                result = TList(term.args)
+                bindings = emptyMap(),
+                subSteps = emptyList()
             )
         }
 
@@ -157,19 +158,19 @@ class Tests : StringSpec() {
             val results = (1..2).map { computer.evaluate(term, emptyMap()) }
             results[0] shouldBe Evaluation(
                 input = term,
+                result = TList(term.args),
                 operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = emptyList(),
-                result = TList(term.args)
+                bindings = emptyMap(),
+                subSteps = emptyList()
             )
             results[1] shouldBe Evaluation(
                 input = term,
+                result = TList(term.args),
                 operation = CACHE_HIT,
-                bindings = emptyMap(),
                 dependencies = emptyMap(),
-                subSteps = emptyList(),
-                result = TList(term.args)
+                bindings = emptyMap(),
+                subSteps = emptyList()
             )
         }
 
@@ -177,10 +178,10 @@ class Tests : StringSpec() {
             val term = """(sys.scripting.groovy/eval "a + b" {:a 1, :b 2})""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
-                dependencies = emptyMap(),
                 result = 3.toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = emptyList()
             )
         }
@@ -189,10 +190,10 @@ class Tests : StringSpec() {
             val term = """(sys.scripting.groovy/eval "arg.'local/a' + arg.'local/b'" {:local/a 1, :local/b 2})""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
-                dependencies = emptyMap(),
                 result = 3.toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = emptyList()
             )
         }
@@ -201,15 +202,15 @@ class Tests : StringSpec() {
             val term = """(sys.scripting.groovy/eval "}{")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
-                dependencies = emptyMap(),
                 result = TError("org.codehaus.groovy.control.MultipleCompilationErrorsException", "startup failed:\r\n" +
                     "sys.scripting.groovy/eval: 1: unexpected token: } @ line 1, column 1.$nl" +
                     "   }{$nl" +
                     "   ^$nl" +
                     nl +
                     "1 error$nl"),
+                operation = APPLY_FUNCTION,
+                dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = emptyList()
             )
         }
@@ -218,10 +219,10 @@ class Tests : StringSpec() {
             val term = """(sys.scripting.groovy/eval "1/0")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
-                dependencies = emptyMap(),
                 result = TError("java.lang.ArithmeticException", "Division by zero"),
+                operation = APPLY_FUNCTION,
+                dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = emptyList()
             )
         }
@@ -230,50 +231,50 @@ class Tests : StringSpec() {
             val term = """(sys.scripting.groovy/eval "5 * 'sys.scripting.groovy/eval'('5 * 5')")""".parseTerm() as TApplication
             term shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = emptyMap(),
-                dependencies = emptyMap(),
                 result = 125.toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = emptyMap(),
+                bindings = emptyMap(),
                 subSteps = listOf(Evaluation(
                     input = GroovyScriptFunction.application("5 * 5"),
-                    operation = APPLY_FUNCTION,
-                    bindings = emptyMap(),
-                    dependencies = emptyMap(),
                     result = 25.toTerm(),
+                    operation = APPLY_FUNCTION,
+                    dependencies = emptyMap(),
+                    bindings = emptyMap(),
                     subSteps = emptyList()
                 ))
             )
         }
 
         "Can make an HTTP get request" {
-            HttpServerLister.server!!.respondTo(HttpMatchers.header("MyHeader", "123"))
+            HttpServer.server.respondTo(HttpMatchers.header("MyHeader", "123"))
                 .withBody("Hello world!")
-            val port = HttpServerLister.server!!.port
+            val port = HttpServer.server.port
             val term = """(sys.net.http/get test/url)""".parseTerm() as TApplication
             val options = """{:url "http://localhost:$port"
                               :headers {"MyHeader" "123"}}""".parseTerm()
             val context = mapOf(TSymbol("test/url") to options)
             term withBindings context shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = context,
-                dependencies = context,
                 result = "Hello world!".toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = context,
+                bindings = context,
                 subSteps = listOf(
                     Evaluation(
                         input = TSymbol("test/url"),
-                        operation = BIND_SYMBOL,
-                        bindings = context,
-                        dependencies = context,
                         result = options,
+                        operation = BIND_SYMBOL,
+                        dependencies = context,
+                        bindings = context,
                         subSteps = emptyList()
                     ),
                     Evaluation(
                         input = TApplication(TSymbol("sys.net.http/get"), listOf(options)),
-                        operation = APPLY_FUNCTION,
-                        bindings = context,
-                        dependencies = emptyMap(),
                         result = "Hello world!".toTerm(),
+                        operation = APPLY_FUNCTION,
+                        dependencies = emptyMap(),
+                        bindings = context,
                         subSteps = emptyList()
                     )
                 )
@@ -286,25 +287,25 @@ class Tests : StringSpec() {
             val term = """(test/four)""".parseTerm() as TApplication
             term withBindings context shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = context,
-                dependencies = context,
                 result = 4.toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = context,
+                bindings = context,
                 subSteps = listOf(
                     Evaluation(
                         input = term,
-                        operation = EXPAND_MACRO,
-                        bindings = context,
-                        dependencies = context,
                         result = macro,
+                        operation = EXPAND_MACRO,
+                        dependencies = context,
+                        bindings = context,
                         subSteps = emptyList()
                     ),
                     Evaluation(
                         input = macro,
-                        operation = APPLY_FUNCTION,
-                        bindings = context,
                         result = 4.toTerm(),
+                        operation = APPLY_FUNCTION,
                         dependencies = emptyMap(),
+                        bindings = context,
                         subSteps = emptyList()
                     ))
             )
@@ -316,29 +317,168 @@ class Tests : StringSpec() {
             val term = """(test/double 3)""".parseTerm() as TApplication
             term withBindings context shouldEvaluateTo Evaluation(
                 input = term,
-                operation = APPLY_FUNCTION,
-                bindings = context,
-                dependencies = context,
                 result = 6.toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = context,
+                bindings = context,
                 subSteps = listOf(
                     Evaluation(
                         input = term,
-                        operation = EXPAND_MACRO,
-                        bindings = context,
-                        dependencies = context,
                         result = """(sys.scripting.groovy/eval "value * 2" {:value 3N})""".parseTerm(),
+                        operation = EXPAND_MACRO,
+                        dependencies = context,
+                        bindings = context,
                         subSteps = emptyList()
                     ),
                     Evaluation(
                         input = """(sys.scripting.groovy/eval "value * 2" {:value 3N})""".parseTerm(),
-                        operation = APPLY_FUNCTION,
-                        bindings = context,
                         result = 6.toTerm(),
+                        operation = APPLY_FUNCTION,
                         dependencies = emptyMap(),
+                        bindings = context,
                         subSteps = emptyList()
                     )
                 )
             )
+        }
+
+        "Invoke script obtained from URL, and cache results" {
+            HttpServer.server.respondTo(HttpMatchers.path("/reverse"))
+                .withBody("value.reverse()")
+            val baseUrl = "http://localhost:${HttpServer.port}"
+            val term = parse("""(test/reverse test/message)""")
+            val bindings1 = bindings(
+                "test/reverse" to """(test/remoteScript "/reverse" {:value %0})""",
+                "test/remoteScript" to """(sys.scripting.groovy/eval (sys.net.http/get {:url (sys.string/concat test/baseUrl %0)}) %1)""",
+                "test/baseUrl" to baseUrl.toTerm(),
+                "test/message" to "Hello world!".toTerm()
+            )
+
+            term withBindings bindings1 shouldEvaluateTo Evaluation(
+                input = term,
+                result = "Hello world!".reversed().toTerm(),
+                operation = APPLY_FUNCTION,
+                dependencies = bindings1,
+                bindings = bindings1,
+                subSteps = listOf(
+                    Evaluation(
+                        input = term,
+                        result = parse("""(test/remoteScript "/reverse" {:value test/message})"""),
+                        operation = EXPAND_MACRO,
+                        dependencies = bindings1.filter { it.key == TSymbol("test/reverse") },
+                        bindings = bindings1,
+                        subSteps = emptyList()
+                    ),
+                    Evaluation(
+                        input = parse("""(test/remoteScript "/reverse" {:value test/message})"""),
+                        result = "Hello world!".reversed().toTerm(),
+                        operation = APPLY_FUNCTION,
+                        dependencies = bindings(
+                            "test/remoteScript" to """(sys.scripting.groovy/eval (sys.net.http/get {:url (sys.string/concat test/baseUrl %0)}) %1)""",
+                            "test/baseUrl" to baseUrl.toTerm(),
+                            "test/message" to "Hello world!".toTerm()
+                        ),
+                        bindings = bindings1,
+                        subSteps = listOf(
+                            Evaluation(
+                                input = parse("""(test/remoteScript "/reverse" {:value test/message})"""),
+                                result = parse("""(sys.scripting.groovy/eval (sys.net.http/get {:url (sys.string/concat test/baseUrl "/reverse")}) {:value test/message})"""),
+                                operation = EXPAND_MACRO,
+                                dependencies = bindings1.filter { it.key == TSymbol("test/remoteScript") },
+                                bindings = bindings1,
+                                subSteps = emptyList()
+                            ),
+                            Evaluation(
+                                input = parse("""(sys.scripting.groovy/eval (sys.net.http/get {:url (sys.string/concat test/baseUrl "/reverse")}) {:value test/message})"""),
+                                result = "Hello world!".reversed().toTerm(),
+                                operation = APPLY_FUNCTION,
+                                dependencies = bindings("test/baseUrl" to baseUrl.toTerm(), "test/message" to "Hello world!".toTerm()),
+                                bindings = bindings1,
+                                subSteps = listOf(
+                                    Evaluation(
+                                        input = parse("""(sys.net.http/get {:url (sys.string/concat test/baseUrl "/reverse")})"""),
+                                        result = "value.reverse()".toTerm(),
+                                        operation = APPLY_FUNCTION,
+                                        dependencies = bindings("test/baseUrl" to baseUrl.toTerm()),
+                                        bindings = bindings1,
+                                        subSteps = listOf(
+                                            Evaluation(
+                                                input = parse("""{:url (sys.string/concat test/baseUrl "/reverse")}"""),
+                                                result = parse("""{:url "http://localhost:${HttpServer.port}/reverse"}"""),
+                                                operation = COMPOUND,
+                                                dependencies = bindings("test/baseUrl" to baseUrl.toTerm()),
+                                                bindings = bindings1,
+                                                subSteps = listOf(
+                                                    Evaluation(
+                                                        input = parse("""(sys.string/concat test/baseUrl "/reverse")"""),
+                                                        result = "http://localhost:${HttpServer.port}/reverse".toTerm(),
+                                                        operation = APPLY_FUNCTION,
+                                                        dependencies = bindings("test/baseUrl" to baseUrl.toTerm()),
+                                                        bindings = bindings1,
+                                                        subSteps = listOf(
+                                                            Evaluation(
+                                                                input = TSymbol("test/baseUrl"),
+                                                                result = "http://localhost:${HttpServer.port}".toTerm(),
+                                                                operation = BIND_SYMBOL,
+                                                                dependencies = bindings("test/baseUrl" to baseUrl.toTerm()),
+                                                                bindings = bindings1,
+                                                                subSteps = emptyList()
+                                                            ),
+                                                            Evaluation(
+                                                                input = parse("""(sys.string/concat "http://localhost:${HttpServer.port}" "/reverse")"""),
+                                                                result = "http://localhost:${HttpServer.port}/reverse".toTerm(),
+                                                                operation = APPLY_FUNCTION,
+                                                                dependencies = emptyMap(),
+                                                                bindings = bindings1,
+                                                                subSteps = emptyList()
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            ),
+                                            Evaluation(
+                                                input = parse("""(sys.net.http/get {:url "http://localhost:${HttpServer.port}/reverse"})"""),
+                                                result = "value.reverse()".toTerm(),
+                                                operation = APPLY_FUNCTION,
+                                                dependencies = emptyMap(),
+                                                bindings = bindings1,
+                                                subSteps = emptyList()
+                                            )
+                                        )
+                                    ),
+                                    Evaluation(
+                                        input = parse("{:value test/message}"),
+                                        result = parse("""{:value "Hello world!"}"""),
+                                        operation = COMPOUND,
+                                        dependencies = bindings("test/message" to "Hello world!".toTerm()),
+                                        bindings = bindings1,
+                                        subSteps = listOf(
+                                            Evaluation(
+                                                input = TSymbol("test/message"),
+                                                result = "Hello world!".toTerm(),
+                                                operation = BIND_SYMBOL,
+                                                dependencies = bindings("test/message" to "Hello world!".toTerm()),
+                                                bindings = bindings1,
+                                                subSteps = emptyList()
+                                            )
+                                        )
+                                    ),
+                                    Evaluation(
+                                        input = parse("""(sys.scripting.groovy/eval "value.reverse()" {:value "Hello world!"})"""),
+                                        result = "Hello world!".reversed().toTerm(),
+                                        operation = APPLY_FUNCTION,
+                                        dependencies = emptyMap(),
+                                        bindings = bindings1,
+                                        subSteps = emptyList()
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+
+            // TODO: Now test that caching works as expected
         }
     }
 }
@@ -483,14 +623,16 @@ class TMapGen<out K: TConstant<*>, out V: Term>(private val keyGen: Gen<K>, priv
 
 data class Input(val term: Term, val bindings: Bindings)
 
-object HttpServerLister : TestListener {
-    var server : MockHttpServer? = null
+object HttpServer : TestListener {
+    lateinit var server : MockHttpServer
+    lateinit var port : String
 
     override fun beforeSpec(description: Description, spec: Spec) {
         server = MockHttpServer()
+        port = server.port.toString()
     }
 
     override fun afterSpec(description: Description, spec: Spec) {
-        server?.stop()
+        server.stop()
     }
 }

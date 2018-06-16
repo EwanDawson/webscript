@@ -164,7 +164,10 @@ sealed class Term {
     }
 }
 
-fun term(value: Any?) = Term.of(value)typealias TBoolean = Term.Atom.Constant.Boolean
+fun term(value: Any?) = Term.of(value)
+fun parse(edn: String) = Term.parse(edn)
+
+typealias TBoolean = Term.Atom.Constant.Boolean
 typealias TCharacter = Term.Atom.Constant.Character
 typealias TDecimal = Term.Atom.Constant.Decimal
 typealias TInteger = Term.Atom.Constant.Integer

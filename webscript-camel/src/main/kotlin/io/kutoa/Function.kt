@@ -5,13 +5,13 @@ abstract class Function(val identifier: TSymbol) {
     abstract fun apply(term: TApplication, bindings: Bindings, computer: Computer) : Evaluation
 }
 
-class ListFunction : Function(TSymbol("sys", "list")) {
+object ListFunction : Function(TSymbol("sys", "list")) {
     override fun apply(term: TApplication, bindings: Bindings, computer: Computer)
         = Evaluation.applyFunction(term, bindings, TList(term.args))
 
 }
 
-class GetFunction : Function(TSymbol("sys", "get")) {
+object GetFunction : Function(TSymbol("sys", "get")) {
     override fun apply(term: TApplication, bindings: Bindings, computer: Computer): Evaluation {
         if (term.args.size != 2) throw SyntaxError("$identifier requires two arguments")
         val (listTerm, indexTerm) = term.args
@@ -24,7 +24,7 @@ class GetFunction : Function(TSymbol("sys", "get")) {
     }
 }
 
-class LetFunction : Function(TSymbol("sys", "let")) {
+object LetFunction : Function(TSymbol("sys", "let")) {
     override fun apply(term: TApplication, bindings: Bindings, computer: Computer): Evaluation {
         if (term.args.size != 2) throw SyntaxError("$identifier requires two arguments")
         val (bindingsListTerm, termToEvaluate) = term.args
@@ -35,4 +35,16 @@ class LetFunction : Function(TSymbol("sys", "let")) {
         return computer.evaluate(termToEvaluate, bindings + letBindings)
     }
     private val syntaxError = SyntaxError("$identifier bindings must be Lists of [Symbol Term] pairs")
+}
+
+object StrConcatFunction : Function(TSymbol("sys.string", "concat")) {
+    override fun apply(term: TApplication, bindings: Bindings, computer: Computer): Evaluation {
+        val result = term.args.joinToString(separator = "", transform = this::stringify).toTerm()
+        return Evaluation.applyFunction(term, bindings, result, emptyList())
+    }
+    private fun stringify(term: Term) : String =
+        when (term) {
+            is Term.Atom.Constant<Any> -> term.value.toString()
+            else -> throw SyntaxError("Cannot coerce non-atomic Term '$term' into a String")
+        }
 }

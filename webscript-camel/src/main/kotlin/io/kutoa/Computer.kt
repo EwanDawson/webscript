@@ -20,40 +20,25 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
 
     private fun evaluateCompound(term: TCompound<*>, bindings: Bindings) : Evaluation {
         val subSteps = mutableListOf<Evaluation>()
-        return when (term) {
-            is TList -> {
-                term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                Evaluation.compound(term, bindings,
-                                    TList(subSteps.map(Evaluation::result)),
-                                    subSteps)
-            }
-            is TSet -> {
-                term.value.forEach { subSteps.add(evaluate(it, bindings)) }
-                Evaluation.compound(term, bindings,
-                                    TSet(subSteps.map(Evaluation::result).toSet()),
-                                    subSteps)
-            }
-            is TMap -> {
-                val result = term.map {
-                    val evaluation = evaluate(it, bindings)
-                    subSteps.add(evaluation)
-                    evaluation.result
-                }
-                Evaluation.compound(term, bindings, result, subSteps)
-            }
+        val result = term.map {
+            val evaluation = evaluate(it, bindings)
+            subSteps.add(evaluation)
+            evaluation.result
         }
+        return Evaluation.compound(term, bindings, result, subSteps)
     }
 
     private fun evaluateSymbol(term: TSymbol, bindings: Bindings) : Evaluation =
         if (bindings.containsKey(term)) {
             val binding = bindings[term]!!
             if (binding.isConstant) {
-                Evaluation(term, bindings, binding, Evaluation.Operation.BIND_SYMBOL, emptyList(),
-                           mapOf(term to binding))
+                Evaluation(term, binding, Evaluation.Operation.BIND_SYMBOL, mapOf(term to binding), bindings,
+                           emptyList())
             } else {
                 val substep = evaluate(bindings[term]!!, bindings)
-                Evaluation(term, bindings, substep.result, Evaluation.Operation.BIND_SYMBOL,
-                           listOf(substep), mapOf(term to binding) + substep.dependencies)
+                Evaluation(term, substep.result, Evaluation.Operation.BIND_SYMBOL,
+                           mapOf(term to binding) + substep.dependencies,
+                           bindings, listOf(substep))
             }
         }
         else {
@@ -70,14 +55,20 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
                     evaluateBuiltIn(term, builtInsMap[term.symbol]!!, bindings)
                 }
                 bindings.containsKey(term.symbol) -> {
-                    val expansion = expandMacro(term, bindings[term.symbol] as TApplication)
-                    subSteps.add(Evaluation.macroExpansion(term, bindings, expansion))
-                    val evaluation = evaluateApplication(expansion, bindings)
-                    dependencies[term.symbol] = bindings[term.symbol]!!
-                    dependencies.putAll(evaluation.dependencies)
-                    subSteps.add(evaluation)
-                    Evaluation(term, bindings, evaluation.result, Evaluation.Operation.APPLY_FUNCTION,
-                               subSteps, dependencies)
+                    try {
+                        dependencies[term.symbol] = bindings[term.symbol]!!
+                        val expansion = expandMacro(term, bindings[term.symbol] as TApplication)
+                        subSteps.add(Evaluation.macroExpansion(term, bindings, expansion))
+                        val evaluation = evaluateApplication(expansion, bindings)
+                        subSteps.add(evaluation)
+                        dependencies.putAll(evaluation.dependencies)
+                        Evaluation(term, evaluation.result, Evaluation.Operation.APPLY_FUNCTION, dependencies,
+                                   bindings, subSteps)
+                    } catch (e: Exception) {
+                        val result = TError(e)
+                        subSteps.add(Evaluation.macroExpansion(term, bindings, result))
+                        Evaluation.applyFunction(term, bindings, result, subSteps)
+                    }
                 }
                 else -> {
                     val error = UnknownSymbolException(term.symbol)
@@ -97,7 +88,9 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
         return when (term) {
             is Term.Atom.Constant<Any> -> term
             is Term.Atom.Constant.Error -> term
-            is Term.Atom.Symbol -> bindings[term] ?: term
+            is Term.Atom.Symbol -> bindings[term]
+                ?: if (isMacroSymbol(term)) throw SyntaxError("Macro bindings does not contain a mapping for symbol '$term'")
+                else term
             is Term.Compound<Any> -> term.map { t -> expandTerm(t, bindings) }
             is Term.Application -> {
                 val symbolExpansion = expandTerm(term.symbol, bindings)
@@ -107,6 +100,8 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             }
         }
     }
+
+    private fun isMacroSymbol(symbol: TSymbol) = symbol.value.name.startsWith("%")
 
     private fun evaluateBuiltIn(term: TApplication, function: Function, bindings: Bindings) : Evaluation {
         val substeps = mutableListOf<Evaluation>()
@@ -126,8 +121,8 @@ class Computer(builtIns: kotlin.collections.List<Function>, private val cache: C
             else {
                 substeps.add(subEvaluation)
                 dependencies.putAll(subEvaluation.dependencies)
-                Evaluation(term, bindings, subEvaluation.result, Evaluation.Operation.APPLY_FUNCTION,
-                           substeps, dependencies)
+                Evaluation(term, subEvaluation.result, Evaluation.Operation.APPLY_FUNCTION, dependencies,
+                           bindings, substeps)
             }
         } catch (e: Exception) {
             Evaluation.applyFunction(term, bindings, e.toTerm())
@@ -140,4 +135,13 @@ open class SyntaxError(message: String) : RuntimeException(message)typealias Bin
 
 data class ErrorInfo(val code: String, val message: String) {
     constructor(throwable: Throwable) : this(throwable::class.java.name, throwable.message?:"")
+}
+
+fun bindings(vararg pairs: Pair<String, Any>) : Bindings
+    = pairs.map { Pair(TSymbol(it.first), parseOrPassThrough(it.second)) }.toMap()
+
+private fun parseOrPassThrough(item: Any) = when (item) {
+    is Term -> item
+    is String -> parse(item)
+    else -> throw IllegalArgumentException("Item must be a Term or String")
 }

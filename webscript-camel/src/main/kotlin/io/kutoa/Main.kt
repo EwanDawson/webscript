@@ -6,8 +6,8 @@ fun main(args: Array<String>) {
     val context = DefaultCamelContext()
     context.start()
     val builtIns = listOf(
-        GetFunction(),
-        LetFunction(),
+        GetFunction,
+        LetFunction,
         HttpGetFunction(context.createFluentProducerTemplate()),
         GroovyScriptFunction()
     )

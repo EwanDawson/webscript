@@ -22,9 +22,9 @@ class Tests : StringSpec() {
         val camel = DefaultCamelContext()
         camel.start()
         val builtIns = listOf(
-            Get(),
-            Let(),
-            List(),
+            GetFunction(),
+            LetFunction(),
+            ListFunction(),
             HttpGetFunction(camel.createFluentProducerTemplate()),
             GroovyScriptFunction()
         )

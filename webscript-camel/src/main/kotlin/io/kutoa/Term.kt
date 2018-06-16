@@ -163,3 +163,32 @@ sealed class Term {
             value.mapKeys { TKeyword(it.key) }.mapValues { of(it.value) })
     }
 }
+
+fun term(value: Any?) = Term.of(value)typealias TBoolean = Term.Atom.Constant.Boolean
+typealias TCharacter = Term.Atom.Constant.Character
+typealias TDecimal = Term.Atom.Constant.Decimal
+typealias TInteger = Term.Atom.Constant.Integer
+typealias TKeyword = Term.Atom.Constant.Keyword
+typealias TNil = Term.Atom.Constant.Nil
+typealias TString = Term.Atom.Constant.String
+typealias TError = Term.Atom.Constant.Error
+typealias TConstant<T> = Term.Atom.Constant<T>
+typealias TSymbol = Term.Atom.Symbol
+typealias TAtom<T> = Term.Atom<T>
+typealias TCompound<T> = Term.Compound<T>
+typealias TList = Term.Compound.List
+typealias TMap = Term.Compound.Map
+typealias TSet = Term.Compound.Set
+typealias TApplication = Term.Application
+
+fun Any.toTerm() = Term.of(this)
+fun String.toTerm() = TString(this)
+fun String.parseTerm() = Term.parse(this)
+fun Int.toTerm() = TInteger(this)
+fun kotlin.collections.List<Any?>.toTerm() = TList(this.map { io.kutoa.Term.of(it) })
+fun kotlin.collections.Map<*,*>.toTerm() = TMap(this.map {
+    Pair(io.kutoa.Term.of(it.key) as? TConstant<*> ?: throw io.kutoa.SyntaxError(
+        "Map key must be a Constant"), io.kutoa.Term.of(it.value))
+}.toMap())
+fun Set<Any?>.toTerm() = TSet(this.map { io.kutoa.Term.of(it) }.toSet())
+fun Throwable.toTerm() = TError(this)
